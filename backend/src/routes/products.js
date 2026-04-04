@@ -1,0 +1,76 @@
+const router = require('express').Router();
+const Product = require('../models/Product');
+const { authAdmin } = require('../middleware/auth');
+
+// ─── Barcha mahsulotlar (public) ───
+router.get('/', async (req, res) => {
+    try {
+        const { search, category, page = 1, limit = 50, popular } = req.query;
+        const filter = { isActive: true };
+
+        if (category) filter.category = category;
+        if (popular === 'true') filter.isPopular = true;
+
+        if (search) {
+            const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            filter.$or = [
+                { name: regex },
+                { ingredients: regex },
+            ];
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const [products, total] = await Promise.all([
+            Product.find(filter).sort({ isPopular: -1, name: 1 }).skip(skip).limit(parseInt(limit)),
+            Product.countDocuments(filter),
+        ]);
+
+        res.json({ products, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Bitta mahsulot ───
+router.get('/:id', async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) return res.status(404).json({ error: 'Mahsulot topilmadi' });
+        res.json(product);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Yangi mahsulot (Admin) ───
+router.post('/', authAdmin, async (req, res) => {
+    try {
+        const product = await Product.create(req.body);
+        res.status(201).json(product);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// ─── Tahrirlash (Admin) ───
+router.put('/:id', authAdmin, async (req, res) => {
+    try {
+        const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!product) return res.status(404).json({ error: 'Mahsulot topilmadi' });
+        res.json(product);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// ─── O'chirish (Admin) ───
+router.delete('/:id', authAdmin, async (req, res) => {
+    try {
+        await Product.findByIdAndUpdate(req.params.id, { isActive: false });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;
