@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: efes-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
+
+  backend:
+    build: ./backend
+    container_name: efes-backend
+    ports:
+      - "3000:3000"
+    env_file: ./backend/.env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/efes_delivery
+    depends_on:
+      - mongodb
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: efes-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: always
+
+  admin:
+    build: ./admin
+    container_name: efes-admin
+    ports:
+      - "5174:80"
+    depends_on:
+      - backend
+    restart: always
+
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: efes-bot
+    env_file: ./backend/.env
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/efes_delivery
+    depends_on:
+      - mongodb
+      - backend
+    restart: always
+
+volumes:
+  mongo_data:
