@@ -1,6 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
 
+const MENU_IMAGES = [
+    { file: 'arabkebab.jpg', label: 'Arab Kebab' },
+    { file: 'iskandarkebab.jpg', label: 'Iskandar Kebab' },
+    { file: 'donar.jpg', label: 'Donar' },
+    { file: 'shaurma.jpg', label: 'Shaurma' },
+    { file: 'lavash.jpg', label: 'Lavash' },
+    { file: 'tandirlavash.jpg', label: 'Tandir Lavash' },
+    { file: 'twister.jpg', label: 'Twister' },
+    { file: 'blackburger.jpg', label: 'Black Burger' },
+    { file: 'chikkenburger.jpg', label: 'Chicken Burger' },
+    { file: 'klab.jpg', label: 'Club Burger' },
+    { file: 'stackbirger.jpg', label: 'Stack Burger' },
+    { file: 'gamuburger.jpg', label: 'Hamburger' },
+    { file: 'nagetsi.jpg', label: 'Nagets' },
+    { file: 'salat.jpg', label: 'Salat' },
+    { file: 'assartitaom.jpg', label: 'Assort / Set' },
+    { file: 'guruch.jpg', label: 'Guruch' },
+    { file: 'xaggi.jpg', label: 'Xaggi' },
+];
+
 const CATEGORIES = [
     { key: '', label: 'Barchasi' },
     { key: 'kebab', label: '🥙 Kebab' }, { key: 'doner', label: '🌯 Döner' },
@@ -34,7 +54,7 @@ export default function ProductsList() {
         if (search) params.set('search', search);
         api.get(`/products?${params}`)
             .then(r => { setProducts(r.data.products || []); setTotal(r.data.total || 0); })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setLoading(false));
     }, [page, category, search]);
 
@@ -69,7 +89,7 @@ export default function ProductsList() {
         try {
             await api.put(`/products/${product._id}`, { isActive: !product.isActive });
             fetchProducts();
-        } catch {}
+        } catch { }
     };
 
     const handleDelete = async (product) => {
@@ -77,7 +97,7 @@ export default function ProductsList() {
         try {
             await api.delete(`/products/${product._id}`);
             fetchProducts();
-        } catch {}
+        } catch { }
     };
 
     const pages = Math.ceil(total / limit);
@@ -124,20 +144,22 @@ export default function ProductsList() {
                                     <tr key={p._id}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                {p.imageUrl
-                                                    ? <img src={p.imageUrl} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
-                                                    : <div style={{ width: 40, height: 40, borderRadius: 8, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🍽</div>
-                                                }
+                                                <img
+                                                    src={p.imageUrl || `/uploads/menu/assartitaom.jpg`}
+                                                    alt=""
+                                                    style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+                                                    onError={e => { e.target.src = '/uploads/menu/assartitaom.jpg'; }}
+                                                />
                                                 <div>
                                                     <div style={{ fontWeight: 600 }}>{p.name}</div>
-                                                    {p.ingredients && <div style={{ fontSize: 11, color: '#6b7280', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.ingredients}</div>}
+                                                    {p.ingredients && <div style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.ingredients}</div>}
                                                 </div>
                                             </div>
                                         </td>
-                                        <td><span style={{ fontSize: 12, background: '#f3f4f6', padding: '3px 8px', borderRadius: 6 }}>{CATEGORIES.find(c => c.key === p.category)?.label || p.category}</span></td>
+                                        <td><span style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '3px 8px', borderRadius: 6 }}>{CATEGORIES.find(c => c.key === p.category)?.label || p.category}</span></td>
                                         <td><strong>{(p.price || 0).toLocaleString()} so'm</strong></td>
-                                        <td style={{ fontSize: 12, color: '#6b7280' }}>{p.weight || '—'}</td>
-                                        <td style={{ fontSize: 12, color: '#6b7280' }}>{p.prepTime ? `${p.prepTime} daq` : '—'}</td>
+                                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.weight || '—'}</td>
+                                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.prepTime ? `${p.prepTime} daq` : '—'}</td>
                                         <td>
                                             <div style={{ display: 'flex', gap: 3 }}>
                                                 {p.isSpicy && <span title="Achchiq" style={{ fontSize: 14 }}>🌶</span>}
@@ -154,7 +176,7 @@ export default function ProductsList() {
                                         <td>
                                             <div style={{ display: 'flex', gap: 4 }}>
                                                 <button className="btn btn-outline btn-sm" onClick={() => openEdit(p)}>✏️</button>
-                                                <button className="btn btn-sm" style={{ background: '#fee2e2', color: 'var(--danger)', border: '1px solid #fecaca' }} onClick={() => handleDelete(p)}>🗑</button>
+                                                <button className="btn btn-sm" style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }} onClick={() => handleDelete(p)}>🗑</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -179,7 +201,7 @@ export default function ProductsList() {
                     <div className="modal" style={{ maxWidth: 540 }} onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <span className="modal-title">{modal === 'add' ? '+ Yangi taom' : `✏️ ${form.name}`}</span>
-                            <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>×</button>
+                            <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
                         </div>
                         <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
@@ -208,9 +230,33 @@ export default function ProductsList() {
                                 <label className="form-label">Tayyorlanish (daq)</label>
                                 <input className="form-input" type="number" value={form.prepTime} onChange={e => setField('prepTime', e.target.value)} placeholder="15" />
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">Rasm URL</label>
-                                <input className="form-input" value={form.imageUrl} onChange={e => setField('imageUrl', e.target.value)} placeholder="https://..." />
+                            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <label className="form-label">Rasm tanlash</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 8 }}>
+                                    {MENU_IMAGES.map(img => {
+                                        const url = `/uploads/menu/${img.file}`;
+                                        const selected = form.imageUrl === url;
+                                        return (
+                                            <div
+                                                key={img.file}
+                                                onClick={() => setField('imageUrl', selected ? '' : url)}
+                                                title={img.label}
+                                                style={{
+                                                    borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
+                                                    border: `2px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
+                                                    boxShadow: selected ? '0 0 0 3px rgba(212,160,23,0.2)' : 'none',
+                                                    transition: 'all 0.2s', position: 'relative',
+                                                }}
+                                            >
+                                                <img src={url} alt={img.label} style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
+                                                {selected && (
+                                                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(212,160,23,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✅</div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <input className="form-input" value={form.imageUrl} onChange={e => setField('imageUrl', e.target.value)} placeholder="Yoki URL kiriting: https://..." style={{ fontSize: 12 }} />
                             </div>
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                 <label className="form-label">Tarkibi</label>

@@ -38,6 +38,8 @@ const orderSchema = new mongoose.Schema({
     subtotal: { type: Number, default: 0 },
     deliveryCost: { type: Number, default: 0 },
     bonusDiscount: { type: Number, default: 0 },
+    promoDiscount: { type: Number, default: 0 },
+    appliedPromo: { type: mongoose.Schema.Types.ObjectId, ref: 'Promotion', default: null },
     total: { type: Number, default: 0 },
     bonusEarned: { type: Number, default: 0 },
 

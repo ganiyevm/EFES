@@ -55,6 +55,7 @@ app.use('/api/import', require('./src/routes/import'));
 app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/delivery', require('./src/routes/delivery'));
+app.use('/api/promotions', require('./src/routes/promotions'));
 
 // ─── Telegram Bot Webhook Proxy ───
 const http = require('http');
@@ -91,6 +92,9 @@ app.post('/click/complete', async (req, res) => {
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', service: 'EFES Delivery', timestamp: new Date().toISOString() });
 });
+
+// ─── Uploads (menu images) ───
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // ─── Static files ───
 // Admin

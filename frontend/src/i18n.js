@@ -137,6 +137,17 @@ const translations = {
         phone: 'Telefon', editProfile: 'Profilni tahrirlash',
         logout: 'Chiqish',
 
+        // ── Promotions ─────────────────────────────────────────────────────
+        promos: 'Aksiyalar', promoCode: 'Promo kod',
+        promoCodePlaceholder: 'Masalan: EFES10',
+        applyPromo: 'Qo\'llash', promoApplied: '✅ Promo kod qo\'llandi!',
+        promoDiscount: 'Promo chegirma',
+        promoInvalid: 'Promo kod noto\'g\'ri yoki muddati o\'tgan',
+        promoMinOrder: 'Minimal buyurtma talabini bajarmadingiz',
+        promoRemove: '✕ Olib tashlash',
+        promoValidating: 'Tekshirilmoqda...',
+        allPromos: 'Barcha aksiyalar',
+
         // ── Common ─────────────────────────────────────────────────────────
         loading: 'Yuklanmoqda...', back: '←', close: 'Yopish',
         save: 'Saqlash', cancel: 'Bekor qilish',
@@ -280,6 +291,17 @@ const translations = {
         phone: 'Телефон', editProfile: 'Редактировать профиль',
         logout: 'Выйти',
 
+        // ── Promotions ─────────────────────────────────────────────────────
+        promos: 'Акции', promoCode: 'Промокод',
+        promoCodePlaceholder: 'Например: EFES10',
+        applyPromo: 'Применить', promoApplied: '✅ Промокод применён!',
+        promoDiscount: 'Скидка по промокоду',
+        promoInvalid: 'Промокод неверный или истёк',
+        promoMinOrder: 'Не выполнено условие минимального заказа',
+        promoRemove: '✕ Убрать',
+        promoValidating: 'Проверяем...',
+        allPromos: 'Все акции',
+
         // ── Common ─────────────────────────────────────────────────────────
         loading: 'Загрузка...', back: '←', close: 'Закрыть',
         save: 'Сохранить', cancel: 'Отмена',
@@ -422,6 +444,17 @@ const translations = {
         pointsToNext: '{n} points to {tier}',
         phone: 'Phone', editProfile: 'Edit profile',
         logout: 'Logout',
+
+        // ── Promotions ─────────────────────────────────────────────────────
+        promos: 'Promotions', promoCode: 'Promo code',
+        promoCodePlaceholder: 'E.g.: EFES10',
+        applyPromo: 'Apply', promoApplied: '✅ Promo code applied!',
+        promoDiscount: 'Promo discount',
+        promoInvalid: 'Invalid or expired promo code',
+        promoMinOrder: 'Minimum order requirement not met',
+        promoRemove: '✕ Remove',
+        promoValidating: 'Checking...',
+        allPromos: 'All promotions',
 
         // ── Common ─────────────────────────────────────────────────────────
         loading: 'Loading...', back: '←', close: 'Close',

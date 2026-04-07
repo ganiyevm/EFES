@@ -2,13 +2,14 @@ const router = require('express').Router();
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
+const Promotion = require('../models/Promotion');
 const BonusService = require('../services/bonus.service');
 const { authTelegram } = require('../middleware/auth');
 
 // ─── Yangi buyurtma ───
 router.post('/', authTelegram, async (req, res) => {
     try {
-        const { items, branch, deliveryType, address, addressLat, addressLng, paymentMethod, phone, bonusDiscount = 0, notes } = req.body;
+        const { items, branch, deliveryType, address, addressLat, addressLng, paymentMethod, phone, bonusDiscount = 0, notes, promoCode } = req.body;
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
@@ -36,8 +37,34 @@ router.post('/', authTelegram, async (req, res) => {
             actualBonusDiscount = Math.min(bonusDiscount, user.bonusPoints, maxBonus);
         }
 
+        // Promo kod tekshirish
+        let promoDiscount = 0;
+        let appliedPromoId = null;
+        if (promoCode) {
+            const now = new Date();
+            const promo = await Promotion.findOne({
+                promoCode: promoCode.toUpperCase().trim(),
+                isActive: true,
+                startDate: { $lte: now },
+                $or: [{ endDate: null }, { endDate: { $gte: now } }],
+            });
+            if (promo && (promo.usageLimit === 0 || promo.usageCount < promo.usageLimit)) {
+                if (subtotal >= (promo.minOrderAmount || 0)) {
+                    if (promo.discountType === 'percent') {
+                        promoDiscount = Math.floor(subtotal * promo.discountValue / 100);
+                        if (promo.maxDiscount > 0) promoDiscount = Math.min(promoDiscount, promo.maxDiscount);
+                    } else {
+                        promoDiscount = promo.discountValue;
+                    }
+                    promoDiscount = Math.min(promoDiscount, subtotal);
+                    appliedPromoId = promo._id;
+                    await Promotion.findByIdAndUpdate(promo._id, { $inc: { usageCount: 1 } });
+                }
+            }
+        }
+
         const deliveryCost = deliveryType === 'delivery' ? 10000 : 0;
-        const total = subtotal - actualBonusDiscount + deliveryCost;
+        const total = subtotal - actualBonusDiscount - promoDiscount + deliveryCost;
 
         const order = await Order.create({
             user: user._id,
@@ -53,6 +80,8 @@ router.post('/', authTelegram, async (req, res) => {
             subtotal,
             deliveryCost,
             bonusDiscount: actualBonusDiscount,
+            promoDiscount,
+            appliedPromo: appliedPromoId,
             total,
             paymentMethod,
             notes,

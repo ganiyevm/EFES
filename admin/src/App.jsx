@@ -9,6 +9,7 @@ import UsersList from './pages/users/UsersList';
 import ImportPage from './pages/import/ImportPage';
 import DeliverySettings from './pages/settings/DeliverySettings';
 import AdminAccountsPage from './pages/accounts/AdminAccountsPage';
+import PromotionsPage from './pages/promotions/PromotionsPage';
 import Sidebar from './components/Sidebar';
 
 function PrivateRoute({ children }) {
@@ -35,6 +36,7 @@ export default function App() {
                                     <Route path="import" element={<ImportPage />} />
                                     <Route path="delivery" element={<DeliverySettings />} />
                                     <Route path="accounts" element={<AdminAccountsPage />} />
+                                    <Route path="promotions" element={<PromotionsPage />} />
                                 </Routes>
                             </div>
                         </div>
