@@ -22,7 +22,7 @@ function loadYmaps() {
         };
 
         const script = document.createElement('script');
-        script.src = 'https://api-maps.yandex.ru/2.1/?lang=ru_RU&onload=__ymapsReady';
+        script.src = 'https://api-maps.yandex.ru/2.1/?apikey=b282d82a-e502-4d33-acb3-d5bd433af913&lang=ru_RU&onload=__ymapsReady';
         script.async = true;
         document.head.appendChild(script);
     });
@@ -40,33 +40,41 @@ export default function MapModal({ onConfirm, onClose, initialAddress = '' }) {
     const [search, setSearch] = useState('');
     const [searching, setSearching] = useState(false);
 
+    const YANDEX_KEY = 'b282d82a-e502-4d33-acb3-d5bd433af913';
+
     const reverseGeocode = useCallback(async (lat, lng) => {
         setLoading(true);
         try {
-            if (window.ymaps) {
-                const res = await window.ymaps.geocode([lat, lng], { results: 1 });
-                const obj = res.geoObjects.get(0);
-                if (obj) {
-                    const meta = obj.properties.get('metaDataProperty.GeocoderMetaData');
-                    const addr = meta?.Address?.formatted || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-                    // Qisqa manzil: ko'cha + uy
-                    const comps = meta?.Address?.Components || [];
-                    const street = comps.find(c => c.kind === 'street')?.name || '';
-                    const house  = comps.find(c => c.kind === 'house')?.name  || '';
-                    setAddress(street && house ? `${street}, ${house}` : street || addr.split(',').slice(0,2).join(',').trim());
-                } else {
-                    setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-                }
+            const r = await fetch(
+                `https://geocode-maps.yandex.ru/1.x/?apikey=${YANDEX_KEY}&geocode=${lng},${lat}&format=json&results=1&lang=uz_UZ`
+            );
+            const data = await r.json();
+            const members = data?.response?.GeoObjectCollection?.featureMember;
+            if (members && members.length > 0) {
+                const geo = members[0].GeoObject;
+                const meta = geo?.metaDataProperty?.GeocoderMetaData;
+                const comps = meta?.Address?.Components || [];
+
+                // Ko'cha va uy raqami
+                const street = comps.find(c => c.kind === 'street')?.name || '';
+                const house  = comps.find(c => c.kind === 'house')?.name  || '';
+                // Mahalla / район
+                const district = comps.find(c => c.kind === 'district')?.name || '';
+                // To'liq format sathini qisqartirish
+                const formatted = meta?.Address?.formatted || '';
+
+                let result = '';
+                if (street && house) result = `${street}, ${house}`;
+                else if (street) result = street;
+                else if (district) result = district;
+                else result = formatted.split(',').slice(0, 3).join(',').trim();
+
+                setAddress(result || formatted);
             } else {
-                // fallback — nominatim
-                const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ru`);
-                const d = await r.json();
-                const a = d.address || {};
-                const parts = [a.road || a.pedestrian, a.house_number].filter(Boolean);
-                setAddress(parts.length ? parts.join(', ') : d.display_name?.split(',')[0] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
             }
         } catch {
-            setAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
         } finally {
             setLoading(false);
         }
@@ -127,14 +135,18 @@ export default function MapModal({ onConfirm, onClose, initialAddress = '' }) {
     }, [reverseGeocode]);
 
     const handleSearch = async () => {
-        if (!search.trim() || !window.ymaps) return;
+        if (!search.trim()) return;
         setSearching(true);
         try {
-            const res = await window.ymaps.geocode(search + ', Toshkent', { results: 1 });
-            const obj = res.geoObjects.get(0);
-            if (obj) {
-                const coords = obj.geometry.getCoordinates();
-                mapInstanceRef.current?.setCenter(coords, 17, { duration: 600 });
+            const r = await fetch(
+                `https://geocode-maps.yandex.ru/1.x/?apikey=${YANDEX_KEY}&geocode=${encodeURIComponent(search + ', Toshkent')}&format=json&results=1&lang=uz_UZ`
+            );
+            const data = await r.json();
+            const members = data?.response?.GeoObjectCollection?.featureMember;
+            if (members && members.length > 0) {
+                const pos = members[0].GeoObject.Point.pos.split(' ');
+                const lng = parseFloat(pos[0]), lat = parseFloat(pos[1]);
+                mapInstanceRef.current?.setCenter([lat, lng], 17, { duration: 600 });
             }
         } catch { }
         finally { setSearching(false); }
