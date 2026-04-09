@@ -5,15 +5,15 @@ import api from '../api';
 import BottomNav from '../components/BottomNav';
 
 const STATUS_COLORS = {
-    awaiting_payment: { color: '#f39c12', bg: 'rgba(243,156,18,0.12)' },
-    pending_operator: { color: '#3498db', bg: 'rgba(52,152,219,0.12)' },
-    confirmed:        { color: '#27ae60', bg: 'rgba(39,174,96,0.12)' },
-    preparing:        { color: '#9b59b6', bg: 'rgba(155,89,182,0.12)' },
-    ready:            { color: '#1abc9c', bg: 'rgba(26,188,156,0.12)' },
-    on_the_way:       { color: '#e67e22', bg: 'rgba(230,126,34,0.12)' },
-    delivered:        { color: '#27ae60', bg: 'rgba(39,174,96,0.12)' },
-    rejected:         { color: '#e74c3c', bg: 'rgba(231,76,60,0.12)' },
-    cancelled:        { color: '#e74c3c', bg: 'rgba(231,76,60,0.12)' },
+    awaiting_payment: { color: '#f39c12', bg: 'rgba(243,156,18,0.1)' },
+    pending_operator: { color: '#3498db', bg: 'rgba(52,152,219,0.1)' },
+    confirmed: { color: '#2ecc71', bg: 'rgba(46,204,113,0.1)' },
+    preparing: { color: '#D4A017', bg: 'rgba(212,160,23,0.1)' },
+    ready: { color: '#1abc9c', bg: 'rgba(26,188,156,0.1)' },
+    on_the_way: { color: '#e67e22', bg: 'rgba(230,126,34,0.1)' },
+    delivered: { color: '#2ecc71', bg: 'rgba(46,204,113,0.1)' },
+    rejected: { color: '#e74c3c', bg: 'rgba(231,76,60,0.1)' },
+    cancelled: { color: '#e74c3c', bg: 'rgba(231,76,60,0.1)' },
 };
 
 const STATUS_ICONS = {
@@ -25,12 +25,17 @@ const STATUS_ICONS = {
 const PAY_ICONS = { cash: '💵', payme: '💳', click: '💙' };
 
 function StatusBadge({ status, t }) {
-    const c = STATUS_COLORS[status] || { color: '#999', bg: 'rgba(153,153,153,0.12)' };
+    const c = STATUS_COLORS[status] || { color: '#999', bg: 'rgba(153,153,153,0.1)' };
     const icon = STATUS_ICONS[status] || '❓';
     const key = `status_${status}`;
     const label = t(key) !== key ? t(key) : status;
     return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, color: c.color, background: c.bg }}>
+        <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+            color: c.color, background: c.bg,
+            border: `1px solid ${c.color}22`,
+        }}>
             {icon} {label}
         </span>
     );
@@ -44,36 +49,55 @@ function OrderDetail({ order, onClose, t }) {
 
     return (
         <div
-            style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}
+            style={{
+                position: 'fixed', inset: 0, zIndex: 9999,
+                background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end',
+                backdropFilter: 'blur(4px)',
+            }}
             onClick={onClose}
         >
             <div
-                style={{ width: '100%', maxHeight: '88vh', overflowY: 'auto', background: 'var(--bg-card)', borderRadius: '20px 20px 0 0', padding: '20px 20px 40px', animation: 'slideUp .25s ease' }}
+                style={{
+                    width: '100%', maxHeight: '88vh', overflowY: 'auto',
+                    background: 'var(--bg-card)', borderRadius: '22px 22px 0 0',
+                    padding: '22px 20px 40px', animation: 'slideUp .3s ease',
+                    border: '1px solid var(--border)', borderBottom: 'none',
+                }}
                 onClick={e => e.stopPropagation()}
             >
+                {/* Handle */}
+                <div style={{ width: 40, height: 4, borderRadius: 4, background: 'var(--border)', margin: '0 auto 16px' }} />
+
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <div>
-                        <div style={{ fontWeight: 900, fontSize: 18 }}>#{order.orderNumber}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        <div style={{ fontWeight: 900, fontSize: 20 }}>#{order.orderNumber}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>
                             {new Date(order.createdAt).toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </div>
                     </div>
-                    <button onClick={onClose} style={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: 50, width: 34, height: 34, fontSize: 18, cursor: 'pointer', color: 'var(--text)' }}>×</button>
+                    <button onClick={onClose} style={{
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        borderRadius: 12, width: 36, height: 36, fontSize: 16,
+                        cursor: 'pointer', color: 'var(--text)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>×</button>
                 </div>
 
                 <StatusBadge status={order.status} t={t} />
 
                 {order.estimatedTime > 0 && (
-                    <div style={{ marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
                         ⏱ {t('estimatedTime')}: ~{order.estimatedTime} {t('minutes')}
                     </div>
                 )}
 
-                <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+                <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
 
                 {/* Items */}
-                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>🍽 {t('orderItems')}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: 'var(--primary-light)' }}>🍽</span> {t('orderItems')}
+                </div>
                 {order.items?.map((item, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, fontSize: 13 }}>
                         <div style={{ flex: 1 }}>
@@ -83,13 +107,17 @@ function OrderDetail({ order, onClose, t }) {
                                 {(item.price || 0).toLocaleString()} so'm × {item.qty}
                             </div>
                         </div>
-                        <div style={{ fontWeight: 800, color: 'var(--primary)', whiteSpace: 'nowrap', marginLeft: 12 }}>
+                        <div style={{
+                            fontWeight: 800, whiteSpace: 'nowrap', marginLeft: 12,
+                            background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                        }}>
                             {((item.price || 0) * item.qty).toLocaleString()} so'm
                         </div>
                     </div>
                 ))}
 
-                <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+                <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
 
                 {order.branch?.name && <InfoRow label={`🏢 ${t('branch')}`} value={order.branch.name} />}
                 {order.branch?.phone && <InfoRow label={`📞 ${t('orderBranchPhone')}`} value={order.branch.phone} />}
@@ -97,7 +125,7 @@ function OrderDetail({ order, onClose, t }) {
                 <InfoRow label={`💳 ${t('paymentTitle')}`} value={payLabel} />
                 {order.notes && <InfoRow label={`📝 ${t('orderNote')}`} value={order.notes} />}
 
-                <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+                <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
 
                 {order.deliveryCost > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: 'var(--text-secondary)' }}>
@@ -106,33 +134,43 @@ function OrderDetail({ order, onClose, t }) {
                     </div>
                 )}
                 {order.bonusDiscount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: '#27ae60' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: '#2ecc71' }}>
                         <span>Bonus chegirma</span>
                         <span>−{order.bonusDiscount.toLocaleString()} so'm</span>
                     </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 17, marginTop: 4 }}>
                     <span>{t('orderTotal')}</span>
-                    <span style={{ color: 'var(--primary)' }}>{(order.total || 0).toLocaleString()} so'm</span>
+                    <span style={{
+                        background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                    }}>{(order.total || 0).toLocaleString()} so'm</span>
                 </div>
 
                 {/* Status History */}
                 {order.statusHistory?.length > 0 && (
                     <>
-                        <hr style={{ margin: '14px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
-                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>📋 {t('statusHistory')}</div>
+                        <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ color: 'var(--primary-light)' }}>📋</span> {t('statusHistory')}
+                        </div>
                         {order.statusHistory.map((h, i) => {
                             const c = STATUS_COLORS[h.status] || { color: '#999' };
                             const icon = STATUS_ICONS[h.status] || '❓';
                             const k = `status_${h.status}`;
                             const label = t(k) !== k ? t(k) : h.status;
                             return (
-                                <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, fontSize: 12 }}>
-                                    <span style={{ fontSize: 16, flexShrink: 0 }}>{icon}</span>
+                                <div key={i} style={{ display: 'flex', gap: 12, marginBottom: 10, fontSize: 12 }}>
+                                    <div style={{
+                                        width: 32, height: 32, borderRadius: 10,
+                                        background: `${c.color}15`, display: 'flex',
+                                        alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 16, flexShrink: 0,
+                                    }}>{icon}</div>
                                     <div>
                                         <span style={{ fontWeight: 700, color: c.color }}>{label}</span>
-                                        {h.note && <div style={{ color: 'var(--text-secondary)' }}>{h.note}</div>}
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>
+                                        {h.note && <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{h.note}</div>}
+                                        <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 2 }}>
                                             {new Date(h.changedAt).toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </div>
                                     </div>
@@ -171,21 +209,34 @@ export default function Orders() {
 
     if (loading) return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg)' }}>
-            <div style={{ fontSize: 36 }}>⏳</div>
+            <div className="spinner" />
         </div>
     );
 
     return (
         <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 90 }}>
             <div style={{ padding: '16px 16px 12px' }}>
-                <div style={{ fontWeight: 800, fontSize: 20 }}>📋 {t('myOrders')}</div>
+                <div style={{ fontWeight: 800, fontSize: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: 'var(--primary-light)' }}>📋</span> {t('myOrders')}
+                </div>
             </div>
 
             {orders.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 64, marginBottom: 16 }}>📋</div>
+                    <div style={{
+                        width: 80, height: 80, borderRadius: 24,
+                        background: 'rgba(212,160,23,0.08)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        fontSize: 40, marginBottom: 20,
+                    }}>📋</div>
                     <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>{t('noOrders')}</div>
-                    <button onClick={() => navigate('/menu')} style={{ padding: '14px 28px', background: 'var(--primary)', border: 'none', borderRadius: 14, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <button onClick={() => navigate('/menu')} style={{
+                        padding: '14px 32px',
+                        background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                        border: 'none', borderRadius: 14, color: '#1a1a24',
+                        fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                        boxShadow: '0 4px 16px rgba(212,160,23,0.3)',
+                    }}>
                         🍽 {t('goToMenu')}
                     </button>
                 </div>
@@ -195,17 +246,26 @@ export default function Orders() {
                         <div
                             key={o._id}
                             onClick={() => setSelected(o)}
-                            style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 14, marginBottom: 10, cursor: 'pointer' }}
+                            style={{
+                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                borderRadius: 18, padding: 16, marginBottom: 10, cursor: 'pointer',
+                                boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+                                transition: 'all 0.25s',
+                            }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <span style={{ fontWeight: 800, fontSize: 15 }}>#{o.orderNumber}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                                <span style={{ fontWeight: 800, fontSize: 16 }}>#{o.orderNumber}</span>
                                 <StatusBadge status={o.status} t={t} />
                             </div>
-                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 500 }}>
                                 {o.items?.length || 0} {t('orderItems').toLowerCase()} · {o.branch?.name || ''}
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontWeight: 800, color: 'var(--primary)', fontSize: 15 }}>
+                                <span style={{
+                                    fontWeight: 800, fontSize: 16,
+                                    background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                                }}>
                                     {(o.total || 0).toLocaleString()} so'm
                                 </span>
                                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>

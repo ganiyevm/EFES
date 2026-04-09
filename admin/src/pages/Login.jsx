@@ -25,15 +25,47 @@ export default function Login() {
     };
 
     return (
-        <div style={{ minHeight: '100vh', background: 'var(--sidebar)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <div style={{ background: '#fff', borderRadius: 20, padding: 32, width: '100%', maxWidth: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{
+            minHeight: '100vh', background: 'var(--bg)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+            position: 'relative', overflow: 'hidden',
+        }}>
+            {/* Background decorative glows */}
+            <div style={{
+                position: 'absolute', top: '20%', left: '30%',
+                width: 300, height: 300, borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(212,160,23,0.08) 0%, transparent 70%)',
+                pointerEvents: 'none',
+            }} />
+            <div style={{
+                position: 'absolute', bottom: '10%', right: '20%',
+                width: 200, height: 200, borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(232,100,32,0.06) 0%, transparent 70%)',
+                pointerEvents: 'none',
+            }} />
+
+            <div style={{
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 24, padding: 36, width: '100%', maxWidth: 400,
+                boxShadow: '0 24px 64px rgba(0,0,0,0.4)', position: 'relative',
+            }}>
                 {/* Logo */}
-                <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                    <div style={{ width: 64, height: 64, borderRadius: 16, background: 'var(--primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, marginBottom: 14 }}>
+                <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                    <div style={{
+                        width: 72, height: 72, borderRadius: 20,
+                        background: 'linear-gradient(135deg, var(--primary), var(--primary-strong))',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 36, marginBottom: 16,
+                        boxShadow: '0 8px 32px rgba(212,160,23,0.3)',
+                    }}>
                         🔥
                     </div>
-                    <div style={{ fontWeight: 900, fontSize: 22, color: '#1a1a2e' }}>EFES Admin</div>
-                    <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>Boshqaruv paneli</div>
+                    <div style={{
+                        fontWeight: 900, fontSize: 26,
+                        background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                    }}>EFES Admin</div>
+                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 6 }}>Boshqaruv paneli</div>
                 </div>
 
                 <form onSubmit={handleLogin}>
@@ -63,7 +95,11 @@ export default function Login() {
                     </div>
 
                     {error && (
-                        <div style={{ background: 'rgba(231,76,60,0.1)', color: 'var(--danger)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
+                        <div style={{
+                            background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.2)',
+                            color: 'var(--danger)', borderRadius: 12, padding: '11px 16px',
+                            fontSize: 13, marginBottom: 16, fontWeight: 500,
+                        }}>
                             ⚠️ {error}
                         </div>
                     )}
@@ -71,7 +107,15 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={loading}
-                        style={{ width: '100%', padding: '13px', background: loading ? '#ccc' : 'var(--primary)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit' }}
+                        style={{
+                            width: '100%', padding: '14px',
+                            background: loading ? 'rgba(154,148,136,0.3)' : 'linear-gradient(135deg, var(--primary), var(--primary-strong))',
+                            border: 'none', borderRadius: 14,
+                            color: loading ? 'var(--text-secondary)' : '#1a1a24',
+                            fontSize: 16, fontWeight: 700, cursor: loading ? 'default' : 'pointer',
+                            fontFamily: 'inherit', transition: 'all 0.3s',
+                            boxShadow: loading ? 'none' : '0 4px 20px rgba(212,160,23,0.3)',
+                        }}
                     >
                         {loading ? '⏳ Kirish...' : '🔐 Kirish'}
                     </button>

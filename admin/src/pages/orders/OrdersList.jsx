@@ -59,7 +59,7 @@ export default function OrdersList() {
         if (status) params.set('status', status);
         api.get(`/admin/orders?${params}`)
             .then(r => { setOrders(r.data.orders || []); setTotal(r.data.total || 0); })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setLoading(false));
     }, [page, status]);
 
@@ -89,7 +89,7 @@ export default function OrdersList() {
             <div className="page-header">
                 <h1 className="page-title">📋 Buyurtmalar</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, color: '#6b7280' }}>Jami: {total}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Jami: {total}</span>
                     <button className="btn btn-outline btn-sm" onClick={fetchOrders}>🔄 Yangilash</button>
                 </div>
             </div>
@@ -101,7 +101,7 @@ export default function OrdersList() {
                         key={s.key}
                         onClick={() => { setStatus(s.key); setPage(1); }}
                         className="btn btn-sm"
-                        style={{ background: status === s.key ? 'var(--primary)' : '#fff', color: status === s.key ? '#fff' : '#374151', border: '1px solid var(--border)' }}
+                        style={{ background: status === s.key ? 'linear-gradient(135deg, var(--primary), var(--primary-strong))' : 'var(--card)', color: status === s.key ? '#1a1a24' : 'var(--text)', border: `1px solid ${status === s.key ? 'transparent' : 'var(--border)'}`, boxShadow: status === s.key ? '0 2px 8px rgba(212,160,23,0.25)' : 'none' }}
                     >
                         {s.key && STATUS_ICONS[s.key]} {s.label}
                     </button>
@@ -133,13 +133,13 @@ export default function OrdersList() {
                                         <td><strong>#{o.orderNumber}</strong></td>
                                         <td>
                                             <div style={{ fontWeight: 600 }}>{o.customerName || '—'}</div>
-                                            <div style={{ fontSize: 11, color: '#6b7280' }}>{o.phone}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{o.phone}</div>
                                         </td>
                                         <td>
                                             {o.items?.slice(0, 2).map((item, i) => (
-                                                <div key={i} style={{ fontSize: 12, color: '#374151' }}>• {item.productName} ×{item.qty}</div>
+                                                <div key={i} style={{ fontSize: 12, color: 'var(--text)' }}>• {item.productName} ×{item.qty}</div>
                                             ))}
-                                            {o.items?.length > 2 && <div style={{ fontSize: 11, color: '#6b7280' }}>+{o.items.length - 2} ta</div>}
+                                            {o.items?.length > 2 && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>+{o.items.length - 2} ta</div>}
                                         </td>
                                         <td><strong>{(o.total || 0).toLocaleString()} so'm</strong></td>
                                         <td>
@@ -153,7 +153,7 @@ export default function OrdersList() {
                                             </span>
                                         </td>
                                         <td style={{ fontSize: 12 }}>#{o.branch?.number} {o.branch?.name}</td>
-                                        <td style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                                        <td style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                                             {new Date(o.createdAt).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td onClick={e => e.stopPropagation()}>
@@ -165,7 +165,7 @@ export default function OrdersList() {
                                                             className="btn btn-sm"
                                                             disabled={updating}
                                                             onClick={() => handleStatusChange(o._id, ns)}
-                                                            style={{ background: ns === 'rejected' || ns === 'cancelled' ? 'var(--danger)' : 'var(--primary)', color: '#fff', fontSize: 11, padding: '4px 8px' }}
+                                                            style={{ background: ns === 'rejected' || ns === 'cancelled' ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, var(--primary), var(--primary-strong))', color: ns === 'rejected' || ns === 'cancelled' ? '#fff' : '#1a1a24', fontSize: 11, padding: '4px 8px' }}
                                                         >
                                                             {STATUS_ICONS[ns]} {STATUS_LABELS[ns]?.split(' ')[0]}
                                                         </button>
@@ -207,7 +207,7 @@ function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
             <div className="modal" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <span className="modal-title">#{order.orderNumber}</span>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>×</button>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
                 </div>
                 <div className="modal-body">
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -232,18 +232,18 @@ function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
                     {/* Items */}
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🍽 Taomlar</div>
                     {order.items?.map((item, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 13 }}>
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                             <div>
                                 <span style={{ fontWeight: 600 }}>{item.productName}</span>
                                 <span style={{ color: '#6b7280' }}> ×{item.qty}</span>
-                                {item.note && <div style={{ fontSize: 11, color: '#f39c12', marginTop: 2 }}>📝 {item.note}</div>}
+                                {item.note && <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 2 }}>📝 {item.note}</div>}
                             </div>
                             <span style={{ fontWeight: 700 }}>{(item.price * item.qty).toLocaleString()} so'm</span>
                         </div>
                     ))}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontWeight: 800, fontSize: 15 }}>
                         <span>JAMI</span>
-                        <span style={{ color: 'var(--primary)' }}>{(order.total || 0).toLocaleString()} so'm</span>
+                        <span style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-strong))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{(order.total || 0).toLocaleString()} so'm</span>
                     </div>
 
                     {/* Change status */}
@@ -264,7 +264,7 @@ function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
                                         className="btn"
                                         disabled={updating}
                                         onClick={() => onStatusChange(order._id, ns, note)}
-                                        style={{ background: ns === 'rejected' ? 'var(--danger)' : 'var(--primary)', color: '#fff' }}
+                                        style={{ background: ns === 'rejected' ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, var(--primary), var(--primary-strong))', color: ns === 'rejected' ? '#fff' : '#1a1a24' }}
                                     >
                                         {STATUS_ICONS[ns]} {STATUS_LABELS[ns]}
                                     </button>
@@ -278,12 +278,12 @@ function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
                         <div style={{ marginTop: 16 }}>
                             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>📋 Tarix</div>
                             {order.statusHistory.map((h, i) => (
-                                <div key={i} style={{ display: 'flex', gap: 10, padding: '6px 0', fontSize: 12, borderBottom: '1px solid #f5f5f5' }}>
+                                <div key={i} style={{ display: 'flex', gap: 10, padding: '6px 0', fontSize: 12, borderBottom: '1px solid var(--border)' }}>
                                     <span>{STATUS_ICONS[h.status] || '•'}</span>
                                     <div>
                                         <span style={{ fontWeight: 600 }}>{STATUS_LABELS[h.status] || h.status}</span>
                                         {h.note && <span style={{ color: '#6b7280' }}> — {h.note}</span>}
-                                        <div style={{ color: '#9ca3af', marginTop: 2 }}>
+                                        <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>
                                             {new Date(h.changedAt).toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </div>
                                     </div>

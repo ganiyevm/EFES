@@ -11,6 +11,11 @@ const userSchema = new mongoose.Schema({
     lastName: { type: String, default: '' },
     username: { type: String, default: '' },
     phone: { type: String, default: '' },
+    gender: { type: String, enum: ['male', 'female', ''], default: '' },
+    birthDate: { type: Date, default: null },
+    isProfileComplete: { type: Boolean, default: false },
+    otpCode: { type: String, default: '' },
+    otpExpiry: { type: Date, default: null },
     language: {
         type: String,
         enum: ['uz', 'ru', 'en'],

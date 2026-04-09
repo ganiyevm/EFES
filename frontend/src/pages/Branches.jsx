@@ -13,7 +13,7 @@ export default function Branches() {
     useEffect(() => {
         api.get('/branches')
             .then(r => setBranches((r.data || []).filter(b => b.isActive)))
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setLoading(false));
     }, []);
 
@@ -32,11 +32,11 @@ export default function Branches() {
         const R = 6371;
         const dLat = (b.location.lat - userPos.lat) * Math.PI / 180;
         const dLng = (b.location.lng - userPos.lng) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(userPos.lat*Math.PI/180)*Math.cos(b.location.lat*Math.PI/180)*Math.sin(dLng/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(userPos.lat * Math.PI / 180) * Math.cos(b.location.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
 
-    const fmtDist = (d) => d < 1 ? `${Math.round(d*1000)} m` : `${d.toFixed(1)} km`;
+    const fmtDist = (d) => d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(1)} km`;
 
     const sorted = [...branches].sort((a, b) => {
         const da = calcDist(a), db = calcDist(b);
@@ -48,18 +48,21 @@ export default function Branches() {
 
     return (
         <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 90 }}>
-            {/* Header */}
-            <div style={{ padding: '16px 16px 12px' }}>
-                <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 12 }}>📍 Filiallar</div>
+            {/* ── Header ── */}
+            <div style={{ padding: '16px 16px 14px' }}>
+                <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: 'var(--primary-light)' }}>📍</span> Filiallar
+                </div>
                 <button
                     onClick={handleLocate}
                     disabled={locating}
                     style={{
-                        width: '100%', padding: '11px 16px',
-                        background: userPos ? 'rgba(39,174,96,0.15)' : 'var(--bg-card)',
-                        border: `1px solid ${userPos ? '#27ae60' : 'var(--border)'}`,
-                        borderRadius: 12, color: userPos ? '#27ae60' : 'var(--text)',
+                        width: '100%', padding: '12px 16px',
+                        background: userPos ? 'rgba(46,204,113,0.08)' : 'var(--bg-card)',
+                        border: `1px solid ${userPos ? 'rgba(46,204,113,0.3)' : 'var(--border)'}`,
+                        borderRadius: 14, color: userPos ? '#2ecc71' : 'var(--text)',
                         fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                        transition: 'all 0.25s',
                     }}
                 >
                     {locating ? `⏳ ${t('locating')}` : userPos ? `✅ ${t('locationFound')}` : `📍 ${t('getDirections')}`}
@@ -67,10 +70,12 @@ export default function Branches() {
             </div>
 
             {loading ? (
-                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>{t('loading')}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 50 }}>
+                    <div className="spinner" />
+                </div>
             ) : branches.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
-                    <div style={{ fontSize: 48, marginBottom: 12 }}>🏢</div>
+                    <div style={{ fontSize: 52, marginBottom: 14 }}>🏢</div>
                     <div style={{ fontWeight: 700 }}>{t('noBranches')}</div>
                 </div>
             ) : (
@@ -100,37 +105,49 @@ function BranchCard({ branch, dist, isNearest, fmtDist, t }) {
     ];
 
     return (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+        <div style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 18, padding: 18, marginBottom: 12,
+            boxShadow: '0 2px 16px rgba(0,0,0,0.15)',
+            transition: 'all 0.25s',
+        }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                 <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <span style={{ fontWeight: 800, fontSize: 15 }}>#{branch.number} {branch.name}</span>
                         {isNearest && (
-                            <span style={{ background: 'rgba(243,156,18,0.2)', color: '#f39c12', borderRadius: 8, fontSize: 10, padding: '2px 7px', fontWeight: 700 }}>
+                            <span style={{
+                                background: 'rgba(212,160,23,0.15)', color: 'var(--primary-light)',
+                                borderRadius: 10, fontSize: 10, padding: '3px 8px', fontWeight: 700,
+                            }}>
                                 ⭐ {t('nearest')}
                             </span>
                         )}
                     </div>
                     <span style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-                        background: branch.isOpen ? 'rgba(39,174,96,0.15)' : 'rgba(231,76,60,0.15)',
-                        color: branch.isOpen ? '#27ae60' : '#e74c3c',
+                        padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                        background: branch.isOpen ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.1)',
+                        color: branch.isOpen ? '#2ecc71' : '#e74c3c',
                     }}>
                         ● {branch.isOpen ? t('openText') : t('closedText')}
                     </span>
                 </div>
                 {dist !== null && (
                     <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 10 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)' }}>{fmtDist(dist)}</div>
+                        <div style={{
+                            fontWeight: 800, fontSize: 14,
+                            background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                        }}>{fmtDist(dist)}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{t('away')}</div>
                     </div>
                 )}
             </div>
 
             {/* Details */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
                 {branch.address && <DetailRow icon="📍" text={branch.address} />}
                 {branch.phone && (
                     <a href={`tel:${branch.phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>
@@ -148,7 +165,15 @@ function BranchCard({ branch, dist, isNearest, fmtDist, t }) {
                 <>
                     <button
                         onClick={() => setNavOpen(!navOpen)}
-                        style={{ width: '100%', padding: '10px', background: navOpen ? 'var(--primary)' : 'var(--bg-secondary)', border: `1px solid ${navOpen ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 10, color: navOpen ? '#fff' : 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                        style={{
+                            width: '100%', padding: '11px',
+                            background: navOpen ? 'linear-gradient(135deg, var(--primary), var(--primary-light))' : 'var(--bg-secondary)',
+                            border: `1px solid ${navOpen ? 'transparent' : 'var(--border)'}`,
+                            borderRadius: 12, color: navOpen ? '#1a1a24' : 'var(--text)',
+                            fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                            boxShadow: navOpen ? '0 2px 12px rgba(212,160,23,0.25)' : 'none',
+                            transition: 'all 0.25s',
+                        }}
                     >
                         🗺 {t('navigate')} {navOpen ? '▲' : '▼'}
                     </button>
@@ -156,7 +181,13 @@ function BranchCard({ branch, dist, isNearest, fmtDist, t }) {
                         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {navLinks.map(nav => (
                                 <a key={nav.label} href={nav.url} target="_blank" rel="noreferrer"
-                                    style={{ padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 13, fontWeight: 500, textDecoration: 'none', display: 'block', textAlign: 'center' }}
+                                    style={{
+                                        padding: '11px 14px', background: 'var(--bg)',
+                                        border: '1px solid var(--border)', borderRadius: 12,
+                                        color: 'var(--text)', fontSize: 13, fontWeight: 600,
+                                        textDecoration: 'none', display: 'block', textAlign: 'center',
+                                        transition: 'all 0.2s',
+                                    }}
                                 >
                                     {nav.label}
                                 </a>
@@ -173,7 +204,7 @@ function DetailRow({ icon, text }) {
     return (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
             <span style={{ flexShrink: 0 }}>{icon}</span>
-            <span style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>{text}</span>
+            <span style={{ color: 'var(--text-secondary)', lineHeight: 1.4, fontWeight: 500 }}>{text}</span>
         </div>
     );
 }

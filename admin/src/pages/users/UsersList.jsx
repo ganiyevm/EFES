@@ -15,7 +15,7 @@ export default function UsersList() {
         if (search) params.set('search', search);
         api.get(`/admin/users?${params}`)
             .then(r => { setUsers(r.data.users || []); setTotal(r.data.total || 0); })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setLoading(false));
     }, [page, search]);
 
@@ -25,7 +25,7 @@ export default function UsersList() {
         try {
             await api.patch(`/admin/users/${user._id}/block`, { isBlocked: !user.isBlocked });
             fetchUsers();
-        } catch {}
+        } catch { }
     };
 
     const TIER_COLORS = { bronze: '#cd7f32', silver: '#aaa', gold: '#f39c12' };
@@ -36,7 +36,7 @@ export default function UsersList() {
         <div>
             <div className="page-header">
                 <h1 className="page-title">👥 Foydalanuvchilar</h1>
-                <span style={{ fontSize: 13, color: '#6b7280' }}>Jami: {total}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Jami: {total}</span>
             </div>
 
             <div className="filter-row">
@@ -75,7 +75,7 @@ export default function UsersList() {
                                                 </div>
                                                 <div>
                                                     <div style={{ fontWeight: 600 }}>{u.firstName} {u.lastName}</div>
-                                                    {u.username && <div style={{ fontSize: 11, color: '#6b7280' }}>@{u.username}</div>}
+                                                    {u.username && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>@{u.username}</div>}
                                                 </div>
                                             </div>
                                         </td>
@@ -88,12 +88,12 @@ export default function UsersList() {
                                         <td><span className="badge badge-warning">{u.bonusPoints || 0} ball</span></td>
                                         <td style={{ fontWeight: 600 }}>{u.totalOrders || 0}</td>
                                         <td style={{ fontWeight: 600 }}>{(u.totalSpent || 0).toLocaleString()} so'm</td>
-                                        <td><span style={{ fontSize: 12, background: '#f3f4f6', padding: '2px 8px', borderRadius: 6 }}>{u.language || 'uz'}</span></td>
-                                        <td style={{ fontSize: 11, color: '#6b7280' }}>{new Date(u.registeredAt).toLocaleDateString()}</td>
+                                        <td><span style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 6 }}>{u.language || 'uz'}</span></td>
+                                        <td style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(u.registeredAt).toLocaleDateString()}</td>
                                         <td>
                                             <button
                                                 className="btn btn-sm"
-                                                style={{ background: u.isBlocked ? '#dcfce7' : '#fee2e2', color: u.isBlocked ? 'var(--success)' : 'var(--danger)', border: 'none' }}
+                                                style={{ background: u.isBlocked ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.08)', color: u.isBlocked ? 'var(--success)' : 'var(--danger)', border: `1px solid ${u.isBlocked ? 'rgba(46,204,113,0.2)' : 'rgba(231,76,60,0.15)'}` }}
                                                 onClick={() => handleBlock(u)}
                                             >
                                                 {u.isBlocked ? '✅ Ochish' : '🚫 Bloklash'}

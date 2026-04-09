@@ -43,18 +43,18 @@ export default function ImportPage() {
                     <div
                         onClick={() => fileRef.current?.click()}
                         style={{
-                            border: `2px dashed ${file ? 'var(--primary)' : '#d1d5db'}`,
+                            border: `2px dashed ${file ? 'var(--primary)' : 'rgba(154,148,136,0.3)'}`,
                             borderRadius: 12, padding: '32px 20px', textAlign: 'center',
                             cursor: 'pointer', marginBottom: 16,
-                            background: file ? 'var(--primary-light)' : '#fafafa',
+                            background: file ? 'var(--primary-light)' : 'var(--bg-secondary)',
                             transition: 'all 0.2s',
                         }}
                     >
                         <div style={{ fontSize: 36, marginBottom: 10 }}>{file ? '✅' : '📁'}</div>
-                        <div style={{ fontWeight: 600, color: file ? 'var(--primary)' : '#374151' }}>
+                        <div style={{ fontWeight: 600, color: file ? 'var(--primary)' : 'var(--text)' }}>
                             {file ? file.name : 'Excel faylni bu yerga tashlang'}
                         </div>
-                        {!file && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>.xlsx yoki .xls formati</div>}
+                        {!file && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>.xlsx yoki .xls formati</div>}
                     </div>
 
                     <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
@@ -62,7 +62,7 @@ export default function ImportPage() {
                     />
 
                     {error && (
-                        <div style={{ background: '#fee2e2', color: 'var(--danger)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 12 }}>
+                        <div style={{ background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.15)', color: 'var(--danger)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 12 }}>
                             ⚠️ {error}
                         </div>
                     )}
@@ -77,7 +77,7 @@ export default function ImportPage() {
                     </button>
 
                     {result && (
-                        <div style={{ marginTop: 16, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '14px 16px' }}>
+                        <div style={{ marginTop: 16, background: 'rgba(46,204,113,0.06)', border: '1px solid rgba(46,204,113,0.2)', borderRadius: 10, padding: '14px 16px' }}>
                             <div style={{ fontWeight: 700, color: 'var(--success)', marginBottom: 10 }}>✅ Import muvaffaqiyatli!</div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                                 <Stat label="Jami qatorlar" value={result.totalRows} color="#374151" />
@@ -91,7 +91,7 @@ export default function ImportPage() {
                 {/* Instructions */}
                 <div className="card">
                     <h3 style={{ marginBottom: 16, fontSize: 16 }}>📋 Excel format</h3>
-                    <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 16, lineHeight: 1.6 }}>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16, lineHeight: 1.6 }}>
                         Excel faylning birinchi satri sarlavha bo'lishi kerak. Quyidagi ustun nomlari qo'llab-quvvatlanadi:
                     </p>
 
@@ -99,9 +99,9 @@ export default function ImportPage() {
                         <table style={{ width: '100%' }}>
                             <thead>
                                 <tr>
-                                    <th style={{ background: '#f9fafb', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontSize: 12, textAlign: 'left' }}>Ustun nomi</th>
-                                    <th style={{ background: '#f9fafb', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontSize: 12, textAlign: 'left' }}>Vazifasi</th>
-                                    <th style={{ background: '#f9fafb', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontSize: 12, textAlign: 'left' }}>Majburiy</th>
+                                    <th style={{ background: 'rgba(212,160,23,0.04)', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontSize: 12, textAlign: 'left' }}>Ustun nomi</th>
+                                    <th style={{ background: 'rgba(212,160,23,0.04)', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontSize: 12, textAlign: 'left' }}>Vazifasi</th>
+                                    <th style={{ background: 'rgba(212,160,23,0.04)', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontSize: 12, textAlign: 'left' }}>Majburiy</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -118,9 +118,9 @@ export default function ImportPage() {
                                 ].map(([col, desc, req]) => (
                                     <tr key={col}>
                                         <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
-                                            <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>{col}</code>
+                                            <code style={{ background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4 }}>{col}</code>
                                         </td>
-                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12, color: '#6b7280' }}>{desc}</td>
+                                        <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text-secondary)' }}>{desc}</td>
                                         <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>{req}</td>
                                     </tr>
                                 ))}
@@ -128,7 +128,7 @@ export default function ImportPage() {
                         </table>
                     </div>
 
-                    <div style={{ marginTop: 16, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: '#92400e' }}>
+                    <div style={{ marginTop: 16, background: 'rgba(241,196,15,0.06)', border: '1px solid rgba(241,196,15,0.15)', color: 'var(--primary)' }}>
                         💡 <strong>Eslatma:</strong> Agar mahsulot allaqachon mavjud bo'lsa (bir xil nomi bo'lsa), yangilanadi. Yangi bo'lsa, qo'shiladi.
                     </div>
                 </div>
@@ -139,9 +139,9 @@ export default function ImportPage() {
 
 function Stat({ label, value, color }) {
     return (
-        <div style={{ background: '#fff', borderRadius: 8, padding: '10px 12px' }}>
+        <div style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '10px 12px' }}>
             <div style={{ fontWeight: 800, fontSize: 20, color }}>{value}</div>
-            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{label}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{label}</div>
         </div>
     );
 }

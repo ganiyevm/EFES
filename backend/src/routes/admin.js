@@ -9,6 +9,28 @@ const BonusService = require('../services/bonus.service');
 const bcrypt = require('bcryptjs');
 const { authAdmin } = require('../middleware/auth');
 
+// ─── Login (ochiq route — authAdmin dan oldin) ───
+router.post('/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const account = await AdminAccount.findOne({ username });
+        if (!account) return res.status(401).json({ error: 'Login yoki parol xato' });
+
+        const valid = await bcrypt.compare(password, account.password);
+        if (!valid) return res.status(401).json({ error: 'Login yoki parol xato' });
+
+        const jwt = require('jsonwebtoken');
+        const token = jwt.sign(
+            { adminId: account._id, username: account.username, role: account.role },
+            process.env.ADMIN_JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        res.json({ token, username: account.username, role: account.role });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.use(authAdmin);
 
 // ─── Dashboard stats ───

@@ -69,6 +69,96 @@ router.post('/telegram', async (req, res) => {
     }
 });
 
+// ─── Send OTP (phone registration) ───
+router.post('/send-otp', async (req, res) => {
+    try {
+        const { phone } = req.body;
+        if (!phone) return res.status(400).json({ error: 'Telefon raqami kerak' });
+
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+
+        // Save OTP to temp storage (or existing user)
+        let user = await User.findOne({ phone });
+        if (!user) {
+            // Store OTP in a temporary field — will create user on verify
+            // Use a simple in-memory map keyed by phone for demo purposes
+            // In production, use Redis or a separate OTP model
+            global._otpStore = global._otpStore || {};
+            global._otpStore[phone] = { code, expiry };
+        } else {
+            user.otpCode = code;
+            user.otpExpiry = expiry;
+            await user.save();
+        }
+
+        // In production: send via SMS gateway (Eskiz, Play Mobile, etc.)
+        // For now: log to console (dev mode)
+        console.log(`📱 OTP for ${phone}: ${code}`);
+
+        res.json({ success: true, message: 'SMS kod yuborildi' });
+    } catch (err) {
+        console.error('OTP send error:', err);
+        res.status(500).json({ error: 'Server xatosi' });
+    }
+});
+
+// ─── Verify OTP & complete registration ───
+router.post('/verify-otp', async (req, res) => {
+    try {
+        const { phone, code, firstName, gender, birthDate } = req.body;
+        if (!phone || !code) return res.status(400).json({ error: 'Telefon va kod kerak' });
+
+        let storedCode, storedExpiry;
+
+        let user = await User.findOne({ phone });
+        if (user) {
+            storedCode = user.otpCode;
+            storedExpiry = user.otpExpiry;
+        } else {
+            const temp = global._otpStore?.[phone];
+            if (!temp) return res.status(400).json({ error: 'Kod topilmadi. Qayta yuboring' });
+            storedCode = temp.code;
+            storedExpiry = temp.expiry;
+        }
+
+        if (storedCode !== code) return res.status(400).json({ error: 'Kod noto\'g\'ri' });
+        if (new Date() > new Date(storedExpiry)) return res.status(400).json({ error: 'Kod muddati tugagan' });
+
+        if (!user) {
+            // Create new user
+            user = await User.create({
+                telegramId: Date.now(), // placeholder for phone-registered users
+                phone,
+                firstName: firstName || '',
+                gender: gender || '',
+                birthDate: birthDate ? new Date(birthDate) : null,
+                isProfileComplete: true,
+            });
+            if (global._otpStore) delete global._otpStore[phone];
+        } else {
+            user.firstName = firstName || user.firstName;
+            user.gender = gender || user.gender;
+            user.birthDate = birthDate ? new Date(birthDate) : user.birthDate;
+            user.isProfileComplete = true;
+            user.otpCode = '';
+            user.otpExpiry = null;
+            await user.save();
+        }
+
+        const token = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        res.json({ token, user });
+    } catch (err) {
+        console.error('OTP verify error:', err);
+        res.status(500).json({ error: 'Server xatosi' });
+    }
+});
+
 // ─── Admin Login ───
 router.post('/admin/login', async (req, res) => {
     try {

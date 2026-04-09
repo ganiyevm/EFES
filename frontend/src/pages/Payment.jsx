@@ -11,8 +11,9 @@ export default function Payment() {
     const orderId = params.get('orderId');
     const method = params.get('method');
     const total = parseInt(params.get('total') || '0');
+    const orderNum = params.get('orderNum') || orderId?.slice(-6).toUpperCase();
 
-    const [status, setStatus] = useState('pending'); // pending | paid | failed | cash
+    const [status, setStatus] = useState('pending');
     const [order, setOrder] = useState(null);
     const [checking, setChecking] = useState(false);
     const pollRef = useRef(null);
@@ -25,7 +26,6 @@ export default function Payment() {
             return;
         }
 
-        // Start polling for payment status
         const poll = async () => {
             try {
                 const r = await api.get(`/orders/${orderId}`);
@@ -38,7 +38,7 @@ export default function Payment() {
                     setStatus('failed');
                     clearInterval(pollRef.current);
                 }
-            } catch {}
+            } catch { }
         };
 
         poll();
@@ -65,55 +65,27 @@ export default function Payment() {
 
     // ── Cash ──
     if (status === 'cash') {
-        return (
-            <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-                <div style={{ fontSize: 72, marginBottom: 20 }}>✅</div>
-                <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 10 }}>{t('orderSuccess')}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 32, lineHeight: 1.6 }}>
-                    {t('pay_cash')} — {t('status_pending_operator')}
-                </div>
-                <button onClick={() => navigate('/orders')} style={btnStyle}>
-                    📋 {t('viewOrders')}
-                </button>
-                <button onClick={() => navigate('/')} style={{ ...btnStyle, background: 'var(--bg-secondary)', marginTop: 10 }}>
-                    🏠 Bosh sahifaga
-                </button>
-            </div>
-        );
+        return <SuccessScreen orderNum={orderNum} navigate={navigate} bonusEarned={0} />;
     }
 
     // ── Paid ──
     if (status === 'paid') {
-        return (
-            <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-                <div style={{ fontSize: 72, marginBottom: 20 }}>🎉</div>
-                <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 10 }}>{t('paymentReceived')}</div>
-                {order?.bonusEarned > 0 && (
-                    <div style={{ background: 'rgba(39,174,96,0.15)', color: '#27ae60', borderRadius: 12, padding: '10px 18px', fontSize: 14, fontWeight: 600, marginBottom: 16 }}>
-                        +{order.bonusEarned} {t('bonusBall')} 🎁
-                    </div>
-                )}
-                <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 32 }}>
-                    {t('status_preparing')} 🍳
-                </div>
-                <button onClick={() => navigate('/orders')} style={btnStyle}>
-                    📋 {t('viewOrders')}
-                </button>
-            </div>
-        );
+        return <SuccessScreen orderNum={orderNum} navigate={navigate} bonusEarned={order?.bonusEarned || 0} />;
     }
 
     // ── Failed ──
     if (status === 'failed') {
         return (
-            <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-                <div style={{ fontSize: 72, marginBottom: 20 }}>❌</div>
-                <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 10 }}>{t('paymentFailed')}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 32 }}>{t('paymentError')}</div>
-                <button onClick={() => navigate(-1)} style={{ ...btnStyle, background: 'var(--accent)' }}>
+            <div style={pageStyle}>
+                <div style={{ ...iconContainerStyle, background: 'rgba(231,76,60,0.1)' }}>
+                    <span style={{ fontSize: 52 }}>❌</span>
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 24, marginBottom: 10 }}>{t('paymentFailed')}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 36 }}>{t('paymentError')}</div>
+                <button onClick={() => navigate(-1)} style={{ ...goldBtnStyle, background: 'linear-gradient(135deg, var(--accent), #FF8C42)' }}>
                     🔄 {t('tryAgain')}
                 </button>
-                <button onClick={() => navigate('/cart')} style={{ ...btnStyle, background: 'var(--bg-secondary)', marginTop: 10 }}>
+                <button onClick={() => navigate('/cart')} style={{ ...secondaryBtnStyle, marginTop: 10 }}>
                     ← {t('backToCart')}
                 </button>
             </div>
@@ -127,42 +99,144 @@ export default function Payment() {
         : `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID}&amount=${total}&transaction_param=${orderId}`;
 
     return (
-        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-            <div style={{ fontSize: 60, marginBottom: 16 }}>
-                {method === 'payme' ? '💳' : '💙'}
+        <div style={pageStyle}>
+            <div style={iconContainerStyle}>
+                <span style={{ fontSize: 48 }}>{method === 'payme' ? '💳' : '💙'}</span>
             </div>
             <div style={{ fontWeight: 900, fontSize: 20, marginBottom: 8 }}>
                 {t('paymentSystem')}: {providerName}
             </div>
-            <div style={{ fontWeight: 800, fontSize: 24, color: 'var(--primary)', marginBottom: 12 }}>
+            <div style={{
+                fontWeight: 900, fontSize: 28, marginBottom: 14,
+                background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>
                 {total.toLocaleString()} so'm
             </div>
             <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8, lineHeight: 1.6 }}>
                 {providerName} {t('paymentProviderMsg')}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 28 }}>
-                🔄 {t('autoUpdateMsg')}
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 30, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+                <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                {t('autoUpdateMsg')}
             </div>
 
             {/* Open payment */}
-            <a href={payUrl} target="_blank" rel="noreferrer" style={{ ...btnStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', marginBottom: 10 }}>
+            <a href={payUrl} target="_blank" rel="noreferrer" style={{
+                ...goldBtnStyle, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, textDecoration: 'none', marginBottom: 10,
+            }}>
                 💳 {providerName} orqali to'lash
             </a>
 
-            <button onClick={handleManualConfirm} disabled={checking} style={{ ...btnStyle, background: 'var(--bg-secondary)', color: 'var(--text)', marginBottom: 10 }}>
+            <button onClick={handleManualConfirm} disabled={checking} style={{ ...secondaryBtnStyle, marginBottom: 10 }}>
                 {checking ? `⏳ ${t('confirmingPayment')}` : `✅ ${t('confirmPayment')}`}
             </button>
 
-            <button onClick={() => navigate('/cart')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+            <button onClick={() => navigate('/cart')} style={{
+                background: 'none', border: 'none', color: 'var(--text-secondary)',
+                fontSize: 13, cursor: 'pointer', marginTop: 4, fontFamily: 'inherit',
+            }}>
                 ← {t('backToCart')}
             </button>
         </div>
     );
 }
 
-const btnStyle = {
+function SuccessScreen({ orderNum, navigate, bonusEarned }) {
+    return (
+        <div style={{
+            minHeight: '100vh', background: 'var(--bg)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: 24, textAlign: 'center',
+        }}>
+            {/* Animated check */}
+            <div style={{
+                width: 110, height: 110, borderRadius: 32,
+                background: 'linear-gradient(135deg, rgba(46,204,113,0.15), rgba(46,204,113,0.05))',
+                border: '2px solid rgba(46,204,113,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 52, marginBottom: 24,
+                boxShadow: '0 8px 32px rgba(46,204,113,0.15)',
+            }}>✅</div>
+
+            <div style={{ fontWeight: 900, fontSize: 26, marginBottom: 8 }}>
+                Buyurtma qabul qilindi!
+            </div>
+
+            {/* Order number */}
+            <div style={{
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 16, padding: '14px 28px', marginBottom: 16,
+                display: 'inline-block',
+            }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Buyurtma raqami</div>
+                <div style={{
+                    fontWeight: 900, fontSize: 28,
+                    background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                }}>#{orderNum}</div>
+            </div>
+
+            <div style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7, marginBottom: 8, maxWidth: 280 }}>
+                Buyurtmangiz muvaffaqiyatli qabul qilindi!<br />
+                Buyurtmangizni <strong style={{ color: 'var(--text)' }}>35 daqiqa</strong> ichida yetkazib beramiz.
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 28 }}>
+                Tanlovingiz uchun tashakkur! 🙏
+            </div>
+
+            {bonusEarned > 0 && (
+                <div style={{
+                    background: 'rgba(46,204,113,0.08)', color: '#2ecc71',
+                    borderRadius: 14, padding: '10px 20px', fontSize: 14, fontWeight: 700, marginBottom: 20,
+                    border: '1px solid rgba(46,204,113,0.2)',
+                }}>
+                    +{bonusEarned} bonus ball olindi 🎁
+                </div>
+            )}
+
+            <button onClick={() => navigate('/')} style={{
+                width: '100%', maxWidth: 360, padding: '16px 24px',
+                background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                border: 'none', borderRadius: 16, color: '#1a1a24',
+                fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                boxShadow: '0 4px 16px rgba(212,160,23,0.3)', marginBottom: 10,
+            }}>🏠 Bosh sahifaga</button>
+
+            <button onClick={() => navigate('/orders')} style={{
+                width: '100%', maxWidth: 360, padding: '14px 24px',
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                borderRadius: 16, color: 'var(--text)', fontSize: 15, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+            }}>📋 Buyurtmalarim</button>
+        </div>
+    );
+}
+
+const pageStyle = {
+    minHeight: '100vh', background: 'var(--bg)',
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    justifyContent: 'center', padding: 24, textAlign: 'center',
+};
+
+const iconContainerStyle = {
+    width: 100, height: 100, borderRadius: 28,
+    background: 'rgba(212,160,23,0.08)', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+};
+
+const goldBtnStyle = {
     width: '100%', maxWidth: 360, padding: '16px 24px',
-    background: 'var(--primary)', border: 'none', borderRadius: 14,
-    color: '#fff', fontSize: 16, fontWeight: 700,
+    background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+    border: 'none', borderRadius: 16, color: '#1a1a24',
+    fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+    boxShadow: '0 4px 16px rgba(212,160,23,0.3)',
+};
+
+const secondaryBtnStyle = {
+    width: '100%', maxWidth: 360, padding: '14px 24px',
+    background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+    borderRadius: 16, color: 'var(--text)', fontSize: 15, fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit',
 };

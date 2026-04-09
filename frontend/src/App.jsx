@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
@@ -10,6 +9,7 @@ import Payment from './pages/Payment';
 import Branches from './pages/Branches';
 import Profile from './pages/Profile';
 import Orders from './pages/Orders';
+import Onboarding from './pages/Onboarding';
 
 export default function App() {
     return (
@@ -26,6 +26,7 @@ export default function App() {
                         <Route path="/branches" element={<Branches />} />
                         <Route path="/profile" element={<Profile />} />
                         <Route path="/orders" element={<Orders />} />
+                        <Route path="/onboarding" element={<Onboarding />} />
                     </Routes>
                 </BrowserRouter>
             </CartProvider>

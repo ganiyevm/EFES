@@ -13,7 +13,7 @@ export default function AdminAccountsPage() {
 
     const fetchAccounts = () => {
         setLoading(true);
-        api.get('/admin/accounts').then(r => setAccounts(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+        api.get('/admin/accounts').then(r => setAccounts(r.data || [])).catch(() => { }).finally(() => setLoading(false));
     };
     useEffect(fetchAccounts, []);
 
@@ -38,7 +38,7 @@ export default function AdminAccountsPage() {
         try {
             await api.delete(`/admin/accounts/${id}`);
             fetchAccounts();
-        } catch {}
+        } catch { }
     };
 
     const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -82,13 +82,13 @@ export default function AdminAccountsPage() {
                                                 {a.role === 'admin' ? '👑 Admin' : '📊 Manager'}
                                             </span>
                                         </td>
-                                        <td style={{ fontSize: 12, color: '#6b7280' }}>
+                                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                             {new Date(a.createdAt).toLocaleDateString()}
                                         </td>
                                         <td>
                                             <button
                                                 className="btn btn-sm"
-                                                style={{ background: '#fee2e2', color: 'var(--danger)', border: 'none' }}
+                                                style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
                                                 onClick={() => handleDelete(a._id, a.username)}
                                             >
                                                 🗑 O'chirish
@@ -107,7 +107,7 @@ export default function AdminAccountsPage() {
                     <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <span className="modal-title">+ Yangi admin</span>
-                            <button onClick={() => setModal(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>×</button>
+                            <button onClick={() => setModal(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
                         </div>
                         <div className="modal-body">
                             <div className="form-group">

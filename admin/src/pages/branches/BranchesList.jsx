@@ -12,7 +12,7 @@ export default function BranchesList() {
 
     const fetchBranches = () => {
         setLoading(true);
-        api.get('/branches').then(r => setBranches(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+        api.get('/branches').then(r => setBranches(r.data || [])).catch(() => { }).finally(() => setLoading(false));
     };
     useEffect(fetchBranches, []);
 
@@ -41,7 +41,7 @@ export default function BranchesList() {
         try {
             await api.put(`/branches/${b._id}`, { [field]: !b[field] });
             fetchBranches();
-        } catch {}
+        } catch { }
     };
 
     const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -79,7 +79,7 @@ export default function BranchesList() {
                                         <td><strong>#{b.number}</strong></td>
                                         <td>
                                             <div style={{ fontWeight: 600 }}>{b.name || '—'}</div>
-                                            <div style={{ fontSize: 12, color: '#6b7280' }}>{b.address}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{b.address}</div>
                                         </td>
                                         <td style={{ fontSize: 13 }}>{b.phone || '—'}</td>
                                         <td style={{ fontSize: 12 }}>{b.hours}</td>
@@ -113,7 +113,7 @@ export default function BranchesList() {
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <span className="modal-title">{modal === 'add' ? '+ Yangi filial' : `✏️ Filial #${form.number}`}</span>
-                            <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>×</button>
+                            <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
                         </div>
                         <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div className="form-group">

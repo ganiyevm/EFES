@@ -9,7 +9,7 @@ export default function Profile() {
     const { user, setUser } = useAuth();
     const { t, lang } = useT();
     const navigate = useNavigate();
-    const [page, setPage] = useState(null); // null | 'bonus' | 'addresses' | 'orders' | 'favorites'
+    const [page, setPage] = useState(null);
     const [orders, setOrders] = useState(null);
     const [bonusTx, setBonusTx] = useState(null);
     const [addresses, setAddresses] = useState(user?.addresses || []);
@@ -18,13 +18,13 @@ export default function Profile() {
     if (!user) return (
         <div style={{ background: 'var(--bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>⏳</div>
+                <div className="spinner" style={{ margin: '0 auto 16px' }} />
                 <div style={{ color: 'var(--text-secondary)' }}>{t('loading')}</div>
             </div>
         </div>
     );
 
-    const tierColors = { bronze: '#cd7f32', silver: '#aaa', gold: '#f39c12' };
+    const tierColors = { bronze: '#cd7f32', silver: '#C0C0C0', gold: '#F0C040' };
     const tierColor = tierColors[user.bonusTier] || '#cd7f32';
     const tierLabel = t(`tier${user.bonusTier?.charAt(0).toUpperCase() + user.bonusTier?.slice(1)}`) || user.bonusTier;
 
@@ -33,17 +33,36 @@ export default function Profile() {
             await api.put('/user/profile', { language: l });
             setUser({ ...user, language: l });
             localStorage.setItem('efes_lang', l);
-        } catch {}
+        } catch { }
     };
 
     // ── Bonus page ──
     if (page === 'bonus') {
         return (
             <SubPage title={`🎁 ${t('bonusPageTitle')}`} onBack={() => setPage(null)}>
-                <div style={{ background: 'linear-gradient(135deg, var(--primary), #c0392b)', borderRadius: 16, padding: 20, marginBottom: 20, textAlign: 'center' }}>
-                    <div style={{ fontSize: 48, fontWeight: 900, color: '#fff' }}>{user.bonusPoints || 0}</div>
-                    <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>{t('bonusBallsLabel')}</div>
-                    <div style={{ marginTop: 12, display: 'inline-block', background: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: '4px 14px', fontSize: 13, fontWeight: 700, color: '#fff' }}>
+                <div style={{
+                    background: 'linear-gradient(135deg, #2D1F05, #1A1508)',
+                    borderRadius: 18, padding: 24, marginBottom: 24, textAlign: 'center',
+                    position: 'relative', overflow: 'hidden',
+                    border: '1px solid rgba(212,160,23,0.2)',
+                }}>
+                    <div style={{
+                        position: 'absolute', top: -30, right: -30, width: 120, height: 120,
+                        borderRadius: '50%', background: 'radial-gradient(circle, rgba(212,160,23,0.15) 0%, transparent 70%)',
+                    }} />
+                    <div style={{
+                        fontSize: 52, fontWeight: 900,
+                        background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                        position: 'relative',
+                    }}>{user.bonusPoints || 0}</div>
+                    <div style={{ color: 'rgba(245,240,232,0.6)', fontSize: 14, marginTop: 4, position: 'relative' }}>{t('bonusBallsLabel')}</div>
+                    <div style={{
+                        marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6,
+                        background: 'rgba(212,160,23,0.15)', border: '1px solid rgba(212,160,23,0.25)',
+                        borderRadius: 24, padding: '5px 16px', fontSize: 13, fontWeight: 700,
+                        color: 'var(--primary-light)', position: 'relative',
+                    }}>
                         🏅 {tierLabel}
                     </div>
                 </div>
@@ -61,46 +80,80 @@ export default function Profile() {
         );
     }
 
-    // ── Main profile ──
+    // ── Main Profile ──
     return (
         <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 90 }}>
-            {/* Header card */}
-            <div style={{ background: 'linear-gradient(135deg, #1c1c28, var(--bg-card))', padding: '24px 20px', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <div style={{ width: 64, height: 64, borderRadius: 50, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
+            {/* ── Profile Header with golden gradient ── */}
+            <div style={{
+                background: 'linear-gradient(160deg, #2D1F05 0%, #1A1508 50%, var(--bg) 100%)',
+                padding: '24px 20px 28px',
+                borderBottom: '1px solid var(--border)',
+                position: 'relative', overflow: 'hidden',
+            }}>
+                {/* Decorative glow */}
+                <div style={{
+                    position: 'absolute', top: -40, left: -20, width: 150, height: 150, borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(212,160,23,0.12) 0%, transparent 70%)',
+                    pointerEvents: 'none',
+                }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative' }}>
+                    <div style={{
+                        width: 68, height: 68, borderRadius: 22,
+                        background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 28, fontWeight: 900, color: '#1a1a24', flexShrink: 0,
+                        boxShadow: '0 4px 20px rgba(212,160,23,0.3)',
+                    }}>
                         {(user.firstName?.[0] || '?').toUpperCase()}
                     </div>
                     <div>
-                        <div style={{ fontWeight: 800, fontSize: 18 }}>{user.firstName} {user.lastName}</div>
-                        {user.phone && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>📞 {user.phone}</div>}
-                        <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 700, color: tierColor }}>
+                        <div style={{ fontWeight: 800, fontSize: 20 }}>{user.firstName} {user.lastName}</div>
+                        {user.phone && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3 }}>📞 {user.phone}</div>}
+                        <div style={{
+                            marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
+                            background: 'rgba(212,160,23,0.1)', border: '1px solid rgba(212,160,23,0.2)',
+                            borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 700,
+                            color: tierColor,
+                        }}>
                             🏅 {tierLabel} · {user.bonusPoints || 0} ball
                         </div>
                     </div>
                 </div>
 
                 {/* Stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18, position: 'relative' }}>
                     <StatCard value={user.totalOrders || 0} label={t('ordersCount')} icon="📋" />
                     <StatCard value={user.bonusPoints || 0} label={t('ballCount')} icon="🎁" />
                 </div>
             </div>
 
-            {/* Menu items */}
-            <div style={{ padding: '12px 16px' }}>
+            {/* ── Menu Items ── */}
+            <div style={{ padding: '14px 16px' }}>
                 <MenuItem icon="📋" label={t('myOrders')} onPress={() => navigate('/orders')} />
                 <MenuItem icon="🎁" label={t('bonusLabel')} onPress={() => setPage('bonus')} badge={user.bonusPoints > 0 ? `${user.bonusPoints}` : null} />
                 <MenuItem icon="📍" label={t('myAddresses')} onPress={() => setPage('addresses')} />
                 <MenuItem icon="❤️" label={t('favorites')} onPress={() => navigate('/menu')} />
 
-                <div style={{ marginTop: 16, marginBottom: 8, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>⚙️ {t('settings')}</div>
+                <div style={{ marginTop: 20, marginBottom: 10, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>⚙️ {t('settings')}</div>
 
                 {/* Language */}
-                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 16px', marginBottom: 10 }}>
+                <div style={{
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 16, padding: '14px 16px', marginBottom: 10,
+                }}>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10, fontWeight: 600 }}>🌐 {t('language')}</div>
                     <div style={{ display: 'flex', gap: 8 }}>
                         {[{ key: 'uz', label: "O'zbek" }, { key: 'ru', label: 'Русский' }, { key: 'en', label: 'English' }].map(l => (
-                            <button key={l.key} onClick={() => handleLang(l.key)} style={{ flex: 1, padding: '9px 4px', borderRadius: 10, background: lang === l.key ? 'var(--primary)' : 'var(--bg-secondary)', border: `1px solid ${lang === l.key ? 'var(--primary)' : 'var(--border)'}`, color: lang === l.key ? '#fff' : 'var(--text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <button key={l.key} onClick={() => handleLang(l.key)} style={{
+                                flex: 1, padding: '10px 4px', borderRadius: 12,
+                                background: lang === l.key ? 'linear-gradient(135deg, var(--primary), var(--primary-light))' : 'var(--bg-secondary)',
+                                border: `1px solid ${lang === l.key ? 'transparent' : 'var(--border)'}`,
+                                color: lang === l.key ? '#1a1a24' : 'var(--text)',
+                                fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                                boxShadow: lang === l.key ? '0 2px 8px rgba(212,160,23,0.2)' : 'none',
+                                transition: 'all 0.25s',
+                            }}>
                                 {l.label}
                             </button>
                         ))}
@@ -116,8 +169,16 @@ export default function Profile() {
 function SubPage({ title, onBack, children }) {
     return (
         <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 30 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-                <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--text)', fontSize: 22, cursor: 'pointer' }}>←</button>
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '16px 16px 14px',
+                borderBottom: '1px solid var(--border)', background: 'var(--bg)',
+                position: 'sticky', top: 0, zIndex: 10,
+            }}>
+                <button onClick={onBack} style={{
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 12, width: 38, height: 38, color: 'var(--text)',
+                    fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>←</button>
                 <span style={{ fontWeight: 800, fontSize: 18 }}>{title}</span>
             </div>
             <div style={{ padding: '16px 16px' }}>{children}</div>
@@ -127,24 +188,44 @@ function SubPage({ title, onBack, children }) {
 
 function StatCard({ value, label, icon }) {
     return (
-        <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '12px 16px', textAlign: 'center' }}>
+        <div style={{
+            background: 'rgba(212,160,23,0.06)', border: '1px solid rgba(212,160,23,0.12)',
+            borderRadius: 14, padding: '14px 16px', textAlign: 'center',
+        }}>
             <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
-            <div style={{ fontWeight: 900, fontSize: 20 }}>{value}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</div>
+            <div style={{
+                fontWeight: 900, fontSize: 22,
+                background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            }}>{value}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500, marginTop: 2 }}>{label}</div>
         </div>
     );
 }
 
 function MenuItem({ icon, label, onPress, badge }) {
     return (
-        <div onClick={onPress} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', marginBottom: 10, cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 20 }}>{icon}</span>
+        <div onClick={onPress} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 16, padding: '15px 16px', marginBottom: 10, cursor: 'pointer',
+            transition: 'all 0.2s',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{
+                    width: 38, height: 38, borderRadius: 12,
+                    background: 'rgba(212,160,23,0.08)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                }}>{icon}</div>
                 <span style={{ fontWeight: 600, fontSize: 15 }}>{label}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {badge && <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: 20, padding: '2px 9px', fontSize: 12, fontWeight: 700 }}>{badge}</span>}
-                <span style={{ color: 'var(--text-secondary)', fontSize: 18 }}>›</span>
+                {badge && <span style={{
+                    background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                    color: '#1a1a24', borderRadius: 20, padding: '3px 10px',
+                    fontSize: 12, fontWeight: 800,
+                }}>{badge}</span>}
+                <span style={{ color: 'var(--primary)', fontSize: 16, fontWeight: 600 }}>›</span>
             </div>
         </div>
     );
@@ -154,22 +235,32 @@ function BonusTxList({ uid, t }) {
     const [txs, setTxs] = useState([]);
     const [loading, setLoading] = useState(true);
     useEffect(() => {
-        api.get('/user/bonus-history').then(r => setTxs(r.data || [])).catch(() => {}).finally(() => setLoading(false));
+        api.get('/user/bonus-history').then(r => setTxs(r.data || [])).catch(() => { }).finally(() => setLoading(false));
     }, []);
-    if (loading) return <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{t('loading')}</div>;
+    if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><div className="spinner" /></div>;
     if (!txs.length) return <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 30 }}>📭 {t('noTransactions')}</div>;
     return (
         <div>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📊 {t('ballHistory')}</div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: 'var(--primary-light)' }}>📊</span> {t('ballHistory')}
+            </div>
             {txs.map((tx, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, marginBottom: 8, fontSize: 13 }}>
+                <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 16px', background: 'var(--bg-card)',
+                    border: '1px solid var(--border)', borderRadius: 14,
+                    marginBottom: 8, fontSize: 13,
+                }}>
                     <div>
                         <div style={{ fontWeight: 600 }}>{tx.description || (tx.type === 'earn' ? '+ Ball' : '- Ball')}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
                             {new Date(tx.createdAt).toLocaleDateString()}
                         </div>
                     </div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: tx.type === 'earn' ? '#27ae60' : '#e74c3c' }}>
+                    <div style={{
+                        fontWeight: 800, fontSize: 16,
+                        color: tx.type === 'earn' ? '#2ecc71' : '#e74c3c',
+                    }}>
                         {tx.type === 'earn' ? '+' : '−'}{tx.amount}
                     </div>
                 </div>
@@ -191,39 +282,69 @@ function AddressManager({ addresses, setAddresses, t }) {
             const r = await api.post('/user/address', { title: name, address: addr });
             setAddresses(r.data);
             setName(''); setAddr(''); setAdding(false);
-        } catch {} finally { setSaving(false); }
+        } catch { } finally { setSaving(false); }
     };
 
     const handleDelete = async (idx) => {
         try {
             const r = await api.delete(`/user/address/${idx}`);
             setAddresses(r.data);
-        } catch {}
+        } catch { }
     };
 
     return (
         <div>
             {addresses.map((a, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
+                <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 14, padding: '14px 16px', marginBottom: 10,
+                }}>
                     <div>
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{a.title}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{a.address}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3 }}>{a.address}</div>
                     </div>
-                    <button onClick={() => handleDelete(i)} style={{ background: 'none', border: 'none', color: '#e74c3c', fontSize: 18, cursor: 'pointer' }}>🗑</button>
+                    <button onClick={() => handleDelete(i)} style={{
+                        background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.15)',
+                        borderRadius: 10, width: 36, height: 36, color: '#e74c3c',
+                        fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>🗑</button>
                 </div>
             ))}
 
             {adding ? (
-                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: 16 }}>
-                    <input value={name} onChange={e => setName(e.target.value)} placeholder={t('addrNamePlaceholder')} style={iStyle} />
-                    <input value={addr} onChange={e => setAddr(e.target.value)} placeholder={t('addrAddrPlaceholder')} style={{ ...iStyle, marginTop: 10 }} />
+                <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 18 }}>
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder={t('addrNamePlaceholder')} style={iStyle}
+                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                    />
+                    <input value={addr} onChange={e => setAddr(e.target.value)} placeholder={t('addrAddrPlaceholder')} style={{ ...iStyle, marginTop: 10 }}
+                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                    />
                     <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                        <button onClick={() => setAdding(false)} style={{ flex: 1, padding: '11px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>{t('cancel')}</button>
-                        <button onClick={handleAdd} disabled={saving} style={{ flex: 1, padding: '11px', background: 'var(--primary)', border: 'none', borderRadius: 10, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>{saving ? '⏳' : t('save')}</button>
+                        <button onClick={() => setAdding(false)} style={{
+                            flex: 1, padding: '12px', background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border)', borderRadius: 12,
+                            color: 'var(--text)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+                        }}>{t('cancel')}</button>
+                        <button onClick={handleAdd} disabled={saving} style={{
+                            flex: 1, padding: '12px',
+                            background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                            border: 'none', borderRadius: 12, color: '#1a1a24',
+                            fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                            boxShadow: '0 2px 8px rgba(212,160,23,0.2)',
+                        }}>{saving ? '⏳' : t('save')}</button>
                     </div>
                 </div>
             ) : (
-                <button onClick={() => setAdding(true)} style={{ width: '100%', padding: '14px', background: 'var(--bg-card)', border: '1px dashed var(--primary)', borderRadius: 14, color: 'var(--primary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <button onClick={() => setAdding(true)} style={{
+                    width: '100%', padding: '14px',
+                    background: 'rgba(212,160,23,0.06)',
+                    border: '1px dashed var(--primary)', borderRadius: 16,
+                    color: 'var(--primary-light)', fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.25s',
+                }}>
                     + {t('addAddress')}
                 </button>
             )}
@@ -231,4 +352,9 @@ function AddressManager({ addresses, setAddresses, t }) {
     );
 }
 
-const iStyle = { width: '100%', padding: '12px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none', fontFamily: 'inherit' };
+const iStyle = {
+    width: '100%', padding: '13px 14px',
+    background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+    borderRadius: 12, color: 'var(--text)', fontSize: 14,
+    outline: 'none', fontFamily: 'inherit', transition: 'all 0.25s',
+};
