@@ -6,6 +6,8 @@ import { useT } from '../i18n';
 import api from '../api';
 import BottomNav from '../components/BottomNav';
 import DeliveryTypeModal from '../components/DeliveryTypeModal';
+import SideMenu from '../components/SideMenu';
+import LangSelect from '../components/LangSelect';
 import { getProductImage } from '../utils/productImage';
 
 const CATS = [
@@ -36,6 +38,8 @@ export default function Home() {
     const [category, setCategory] = useState('all');
     const [search, setSearch] = useState('');
     const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+    const [showSideMenu, setShowSideMenu] = useState(false);
+    const [showLangSelect, setShowLangSelect] = useState(false);
     const debounceRef = useRef(null);
     const catRef = useRef(null);
 
@@ -127,9 +131,9 @@ export default function Home() {
                         </div>
                     </button>
 
-                    {/* Menu icon */}
+                    {/* Hamburger menu */}
                     <button
-                        onClick={() => navigate('/profile')}
+                        onClick={() => setShowSideMenu(true)}
                         style={{
                             width: 40, height: 40, borderRadius: 12, flexShrink: 0,
                             background: 'rgba(255,255,255,0.1)', border: 'none',
@@ -246,7 +250,22 @@ export default function Home() {
             {showDeliveryModal && (
                 <DeliveryTypeModal onSelect={() => {
                     setShowDeliveryModal(false);
-                    // force re-render header
+                    window.location.reload();
+                }} />
+            )}
+
+            {/* Side menu */}
+            {showSideMenu && (
+                <SideMenu
+                    onClose={() => setShowSideMenu(false)}
+                    onLangOpen={() => setShowLangSelect(true)}
+                />
+            )}
+
+            {/* Lang select */}
+            {showLangSelect && (
+                <LangSelect onSelect={() => {
+                    setShowLangSelect(false);
                     window.location.reload();
                 }} />
             )}
