@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: efes-delivery
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: CLICK_MERCHANT_ID
+        sync: false
+      - key: CLICK_SERVICE_ID
+        sync: false
+      - key: CLICK_SECRET_KEY
+        sync: false
+      - key: PAYME_MERCHANT_ID
+        sync: false
+      - key: PAYME_MERCHANT_KEY
+        sync: false
+    healthCheckPath: /api/categories
+    autoDeploy: true
