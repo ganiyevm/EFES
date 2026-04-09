@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import LangSelect from './components/LangSelect';
+import DeliveryTypeModal from './components/DeliveryTypeModal';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
 import ProductDetail from './pages/ProductDetail';
@@ -15,11 +16,22 @@ import Onboarding from './pages/Onboarding';
 
 export default function App() {
     const [langChosen, setLangChosen] = useState(!!localStorage.getItem('efes_lang'));
+    const [deliveryChosen, setDeliveryChosen] = useState(!!localStorage.getItem('efes_delivery_type'));
 
+    // 1-qadam: Til tanlash
     if (!langChosen) {
         return (
             <AuthProvider>
                 <LangSelect onSelect={() => setLangChosen(true)} />
+            </AuthProvider>
+        );
+    }
+
+    // 2-qadam: Buyurtma turi + manzil
+    if (!deliveryChosen) {
+        return (
+            <AuthProvider>
+                <DeliveryTypeModal onSelect={() => setDeliveryChosen(true)} />
             </AuthProvider>
         );
     }

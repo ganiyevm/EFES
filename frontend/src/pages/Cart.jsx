@@ -19,11 +19,15 @@ export default function Cart() {
     const { user } = useAuth();
     const { items, updateQty, updateNote, clearCart, totalPrice } = useCart();
 
-    const [deliveryType, setDeliveryType] = useState('delivery');
+    const [deliveryType, setDeliveryType] = useState(
+        localStorage.getItem('efes_delivery_type') || 'delivery'
+    );
     const [paymentMethod, setPaymentMethod] = useState('payme');
 
     // Address fields
-    const [address, setAddress] = useState('');
+    const [address, setAddress] = useState(
+        localStorage.getItem('efes_address') || ''
+    );
     const [house, setHouse] = useState('');
     const [entrance, setEntrance] = useState('');
     const [floor, setFloor] = useState('');
