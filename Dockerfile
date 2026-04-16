@@ -24,5 +24,6 @@ COPY --from=admin-build     /app/admin/dist    ./admin/dist
 COPY --from=frontend-build  /app/frontend/dist ./frontend/dist
 
 EXPOSE 3000
+EXPOSE 3001
 
-CMD ["node", "backend/server.js"]
+CMD ["sh", "-c", "node backend/bot.js & node backend/server.js"]
