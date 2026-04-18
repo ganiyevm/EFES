@@ -52,7 +52,7 @@ export default function Home() {
     const [allProducts, setAllProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [promos, setPromos] = useState([]);
-    const [activeKey, setActiveKey] = useState('all');
+    const [activeKey, setActiveKey] = useState('');
     const [search, setSearch] = useState('');
     const [showDeliveryModal, setShowDeliveryModal] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
@@ -102,11 +102,6 @@ export default function Home() {
 
     // ── Category pill click → scroll to section ──
     const handleCatClick = (key) => {
-        if (key === 'all') {
-            setActiveKey('all');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
         const el = sectionRefs.current[key];
         if (!el) return;
         scrollingRef.current = true;
@@ -140,11 +135,8 @@ export default function Home() {
         ? 'Olib ketish'
         : (savedAddress ? savedAddress.split(',')[0] : 'Manzil tanlang');
 
-    // visible cats = only those with products
-    const activeCats = [
-        CATS[0], // Barchasi
-        ...groups.map(g => CATS.find(c => c.key === g.key)).filter(Boolean),
-    ];
+    // visible cats = only those with products (no "Barchasi")
+    const activeCats = groups.map(g => CATS.find(c => c.key === g.key)).filter(Boolean);
 
     return (
         <div style={{ background: '#F5F2EE', minHeight: '100vh', paddingBottom: 90 }}>
@@ -231,7 +223,7 @@ export default function Home() {
                 position: 'sticky', top: 78, zIndex: 40,
                 background: '#F5F2EE',
             }}>
-                {(search ? [CATS[0]] : activeCats).map(c => {
+                {activeCats.map(c => {
                     const active = activeKey === c.key;
                     return (
                         <button
@@ -357,7 +349,7 @@ function ProductCard({ product, inCart, onPress, onAdd }) {
             style={{
                 background: '#fff', borderRadius: 18,
                 overflow: 'hidden', cursor: 'pointer',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.09)',
+                boxShadow: '0 4px 16px rgba(34,139,34,0.22)',
                 display: 'flex', flexDirection: 'column',
                 transition: 'transform 0.15s',
                 position: 'relative',
