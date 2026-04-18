@@ -77,15 +77,6 @@ export default function ProductDetail() {
                     {product.name}
                 </div>
 
-                {/* Price */}
-                <div style={{
-                    fontSize: 28, fontWeight: 900, marginBottom: 18,
-                    background: 'linear-gradient(135deg, #F0C040, #D4A017)',
-                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                }}>
-                    {(product.price || 0).toLocaleString()} so'm
-                </div>
-
                 {/* Meta row */}
                 {(product.weight || product.calories || product.prepTime) && (
                     <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
@@ -203,10 +194,7 @@ export default function ProductDetail() {
                             letterSpacing: 0.02,
                         }}
                     >
-                        {added
-                            ? '✅ ' + t('inCart')
-                            : `${t('addToCart')} • ${(product.price * qty).toLocaleString()} so'm`
-                        }
+                        {added ? '✅ ' + t('inCart') : t('addToCart')}
                     </button>
                 </div>
             </div>

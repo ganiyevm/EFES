@@ -201,14 +201,7 @@ function MenuCard({ product, inCart, onPress, onAdd }) {
                         {product.weight} {product.calories ? `· ${product.calories} kcal` : ''}
                     </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                    <div style={{
-                        fontWeight: 800, fontSize: 14,
-                        background: 'linear-gradient(135deg, #F0C040, #D4A017)',
-                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                    }}>
-                        {(product.price || 0).toLocaleString()} so'm
-                    </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: 'auto' }}>
                     <button
                         onClick={e => { e.stopPropagation(); onAdd(); }}
                         style={{
