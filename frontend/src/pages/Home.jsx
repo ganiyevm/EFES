@@ -26,77 +26,136 @@ const CATS = [
     { key: 'garnir',   label: 'Garnirlar',     icon: '🍟' },
 ];
 
+// Mahsulotlarni kategoriyalarga guruhlash
+function groupByCategory(products) {
+    const order = CATS.filter(c => c.key !== 'all').map(c => c.key);
+    const map = {};
+    products.forEach(p => {
+        const key = p.category || 'other';
+        if (!map[key]) map[key] = [];
+        map[key].push(p);
+    });
+    const result = [];
+    order.forEach(key => { if (map[key]?.length) result.push({ key, items: map[key] }); });
+    Object.keys(map).forEach(key => {
+        if (!order.includes(key) && map[key]?.length) result.push({ key, items: map[key] });
+    });
+    return result;
+}
+
 export default function Home() {
     const { user } = useAuth();
     const { items, addItem } = useCart();
     const { lang } = useT();
     const navigate = useNavigate();
 
-    const [products, setProducts] = useState([]);
+    const [allProducts, setAllProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [promos, setPromos] = useState([]);
-    const [category, setCategory] = useState('all');
+    const [activeKey, setActiveKey] = useState('all');
     const [search, setSearch] = useState('');
     const [showDeliveryModal, setShowDeliveryModal] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showLangSelect, setShowLangSelect] = useState(false);
+
     const debounceRef = useRef(null);
-    const catRef = useRef(null);
+    const catBarRef = useRef(null);        // pills container
+    const sectionRefs = useRef({});        // { catKey: domEl }
+    const scrollingRef = useRef(false);    // pill click scroll lock
 
     const deliveryType = localStorage.getItem('efes_delivery_type') || 'delivery';
     const savedAddress = localStorage.getItem('efes_address') || '';
-
     const inCartMap = Object.fromEntries(items.map(i => [i.productId, i.qty]));
 
-    const fetchProducts = (q, cat) => {
+    // ── Fetch ──
+    const fetchAll = (q = '') => {
         setLoading(true);
-        const p = new URLSearchParams({ limit: 100 });
+        const p = new URLSearchParams({ limit: 200 });
         if (q) p.set('search', q);
-        if (cat && cat !== 'all') p.set('category', cat);
         api.get(`/products?${p}`)
-            .then(r => setProducts(r.data.products || []))
-            .catch(() => setProducts([]))
+            .then(r => setAllProducts(r.data.products || []))
+            .catch(() => setAllProducts([]))
             .finally(() => setLoading(false));
     };
 
     useEffect(() => {
-        fetchProducts(search, category);
+        fetchAll();
         api.get('/promotions').then(r => setPromos(r.data || [])).catch(() => {});
     }, []);
-
-    useEffect(() => { fetchProducts(search, category); }, [category]);
 
     const handleSearch = (val) => {
         setSearch(val);
         clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchProducts(val, category), 400);
+        debounceRef.current = setTimeout(() => fetchAll(val), 400);
     };
 
-    const handleCatSelect = (key) => {
-        setCategory(key);
-        // scroll active pill into view
-        setTimeout(() => {
-            const el = catRef.current?.querySelector(`[data-cat="${key}"]`);
-            el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-        }, 50);
+    // ── Grouped data ──
+    const groups = search
+        ? [{ key: 'search', items: allProducts }]
+        : groupByCategory(allProducts);
+
+    // ── Scroll pill into view ──
+    const scrollPillIntoView = (key) => {
+        const el = catBarRef.current?.querySelector(`[data-cat="${key}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     };
 
-    // Header address label
+    // ── Category pill click → scroll to section ──
+    const handleCatClick = (key) => {
+        if (key === 'all') {
+            setActiveKey('all');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        const el = sectionRefs.current[key];
+        if (!el) return;
+        scrollingRef.current = true;
+        setActiveKey(key);
+        scrollPillIntoView(key);
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(() => { scrollingRef.current = false; }, 800);
+    };
+
+    // ── IntersectionObserver: section → active pill ──
+    useEffect(() => {
+        if (search) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (scrollingRef.current) return;
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const key = entry.target.dataset.section;
+                        setActiveKey(key);
+                        scrollPillIntoView(key);
+                    }
+                });
+            },
+            { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
+        );
+        Object.values(sectionRefs.current).forEach(el => el && observer.observe(el));
+        return () => observer.disconnect();
+    }, [groups.map(g => g.key).join(','), search]);
+
     const addressLabel = deliveryType === 'pickup'
         ? 'Olib ketish'
         : (savedAddress ? savedAddress.split(',')[0] : 'Manzil tanlang');
 
+    // visible cats = only those with products
+    const activeCats = [
+        CATS[0], // Barchasi
+        ...groups.map(g => CATS.find(c => c.key === g.key)).filter(Boolean),
+    ];
+
     return (
         <div style={{ background: '#F5F2EE', minHeight: '100vh', paddingBottom: 90 }}>
 
-            {/* ══ HEADER (maroon) ══ */}
+            {/* ══ HEADER ══ */}
             <div style={{
                 background: 'linear-gradient(135deg, #3D0F0F 0%, #5C1A1A 100%)',
                 padding: '14px 16px 16px',
                 position: 'sticky', top: 0, zIndex: 50,
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    {/* Avatar */}
                     <div style={{
                         width: 40, height: 40, borderRadius: '50%',
                         background: 'linear-gradient(135deg, #D4A017, #F0C040)',
@@ -105,43 +164,25 @@ export default function Home() {
                     }}>
                         {user?.firstName?.[0]?.toUpperCase() || 'G'}
                     </div>
-
-                    {/* Delivery type + address — center */}
-                    <button
-                        onClick={() => setShowDeliveryModal(true)}
-                        style={{
-                            flex: 1, margin: '0 12px', textAlign: 'center',
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            fontFamily: 'inherit',
-                        }}
-                    >
-                        <div style={{
-                            fontSize: 13, fontWeight: 700, color: '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                        }}>
+                    <button onClick={() => setShowDeliveryModal(true)} style={{
+                        flex: 1, margin: '0 12px', textAlign: 'center',
+                        background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                             {deliveryType === 'delivery' ? '🚗 Yetkazib berish' : '🏃 Olib ketish'}
                             <span style={{ fontSize: 10, opacity: 0.7 }}>▼</span>
                         </div>
-                        <div style={{
-                            fontSize: 12, color: 'rgba(255,255,255,0.65)',
-                            marginTop: 1, maxWidth: 180, overflow: 'hidden',
-                            textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px auto 0',
-                        }}>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 1, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px auto 0' }}>
                             {addressLabel}
                         </div>
                     </button>
-
-                    {/* Hamburger menu */}
-                    <button
-                        onClick={() => setShowSideMenu(true)}
-                        style={{
-                            width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                            background: 'rgba(255,255,255,0.1)', border: 'none',
-                            cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                            alignItems: 'center', justifyContent: 'center', gap: 4,
-                        }}
-                    >
-                        {[0,0,0].map((_, i) => (
+                    <button onClick={() => setShowSideMenu(true)} style={{
+                        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                        background: 'rgba(255,255,255,0.1)', border: 'none',
+                        cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', gap: 4,
+                    }}>
+                        {[0, 0, 0].map((_, i) => (
                             <div key={i} style={{ width: 18, height: 2, borderRadius: 2, background: '#fff' }} />
                         ))}
                     </button>
@@ -158,10 +199,7 @@ export default function Home() {
             {/* ══ SEARCH ══ */}
             <div style={{ padding: '12px 16px 0' }}>
                 <div style={{ position: 'relative' }}>
-                    <span style={{
-                        position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-                        fontSize: 16, color: '#999',
-                    }}>🔍</span>
+                    <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: '#999' }}>🔍</span>
                     <input
                         value={search}
                         onChange={e => handleSearch(e.target.value)}
@@ -171,14 +209,13 @@ export default function Home() {
                             background: '#fff', border: '1.5px solid #E8E0D5',
                             borderRadius: 14, fontSize: 15, color: '#222',
                             outline: 'none', fontFamily: 'inherit',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                            transition: 'border-color 0.2s',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'border-color 0.2s',
                         }}
                         onFocus={e => e.target.style.borderColor = '#C1440E'}
                         onBlur={e => e.target.style.borderColor = '#E8E0D5'}
                     />
                     {search && (
-                        <button onClick={() => { setSearch(''); fetchProducts('', category); }} style={{
+                        <button onClick={() => { setSearch(''); fetchAll(''); }} style={{
                             position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                             background: '#eee', border: 'none', borderRadius: 8,
                             width: 26, height: 26, cursor: 'pointer', fontSize: 13, color: '#666',
@@ -187,21 +224,20 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* ══ CATEGORY PILLS ══ */}
-            <div
-                ref={catRef}
-                style={{
-                    display: 'flex', gap: 8, overflowX: 'auto',
-                    padding: '12px 16px 4px', scrollbarWidth: 'none',
-                }}
-            >
-                {CATS.map(c => {
-                    const active = category === c.key;
+            {/* ══ CATEGORY PILLS (sticky) ══ */}
+            <div ref={catBarRef} style={{
+                display: 'flex', gap: 8, overflowX: 'auto',
+                padding: '12px 16px 8px', scrollbarWidth: 'none',
+                position: 'sticky', top: 78, zIndex: 40,
+                background: '#F5F2EE',
+            }}>
+                {(search ? [CATS[0]] : activeCats).map(c => {
+                    const active = activeKey === c.key;
                     return (
                         <button
                             key={c.key}
                             data-cat={c.key}
-                            onClick={() => handleCatSelect(c.key)}
+                            onClick={() => handleCatClick(c.key)}
                             style={{
                                 flexShrink: 0, padding: '9px 16px', borderRadius: 24,
                                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -209,8 +245,7 @@ export default function Home() {
                                 background: active ? '#C1440E' : '#fff',
                                 color: active ? '#fff' : '#444',
                                 boxShadow: active ? '0 4px 12px rgba(193,68,14,0.35)' : '0 1px 4px rgba(0,0,0,0.08)',
-                                transition: 'all 0.2s',
-                                whiteSpace: 'nowrap',
+                                transition: 'all 0.2s', whiteSpace: 'nowrap',
                             }}
                         >
                             {c.icon} {c.label}
@@ -219,57 +254,64 @@ export default function Home() {
                 })}
             </div>
 
-            {/* ══ PRODUCTS GRID ══ */}
-            <div style={{ padding: '10px 16px 8px' }}>
+            {/* ══ PRODUCTS (grouped sections) ══ */}
+            <div style={{ padding: '4px 16px 8px' }}>
                 {loading ? (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: 50 }}>
                         <div className="spinner" style={{ borderTopColor: '#C1440E', borderColor: '#E8E0D5' }} />
                     </div>
-                ) : products.length === 0 ? (
+                ) : groups.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                         <div style={{ fontSize: 52, marginBottom: 14 }}>🔍</div>
                         <div style={{ fontWeight: 700, fontSize: 16, color: '#333', marginBottom: 6 }}>Mahsulot topilmadi</div>
                         <div style={{ color: '#999', fontSize: 14 }}>Boshqa kalit so'z bilan qidiring</div>
                     </div>
                 ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        {products.map(p => (
-                            <ProductCard
-                                key={p._id}
-                                product={p}
-                                inCart={inCartMap[p._id] || 0}
-                                onPress={() => navigate(`/product/${p._id}`)}
-                                onAdd={() => addItem(p)}
-                            />
-                        ))}
-                    </div>
+                    groups.map(group => {
+                        const catInfo = CATS.find(c => c.key === group.key);
+                        return (
+                            <div
+                                key={group.key}
+                                ref={el => { sectionRefs.current[group.key] = el; }}
+                                data-section={group.key}
+                            >
+                                {/* Section header */}
+                                {!search && (
+                                    <div style={{
+                                        fontWeight: 800, fontSize: 16, color: '#1A1A1A',
+                                        padding: '16px 0 10px',
+                                        display: 'flex', alignItems: 'center', gap: 8,
+                                    }}>
+                                        <span>{catInfo?.icon}</span>
+                                        <span>{catInfo?.label || group.key}</span>
+                                    </div>
+                                )}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+                                    {group.items.map(p => (
+                                        <ProductCard
+                                            key={p._id}
+                                            product={p}
+                                            inCart={inCartMap[p._id] || 0}
+                                            onPress={() => navigate(`/product/${p._id}`)}
+                                            onAdd={() => addItem(p)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })
                 )}
             </div>
 
-            {/* Delivery type modal */}
             {showDeliveryModal && (
-                <DeliveryTypeModal onSelect={() => {
-                    setShowDeliveryModal(false);
-                    window.location.reload();
-                }} />
+                <DeliveryTypeModal onSelect={() => { setShowDeliveryModal(false); window.location.reload(); }} />
             )}
-
-            {/* Side menu */}
             {showSideMenu && (
-                <SideMenu
-                    onClose={() => setShowSideMenu(false)}
-                    onLangOpen={() => setShowLangSelect(true)}
-                />
+                <SideMenu onClose={() => setShowSideMenu(false)} onLangOpen={() => setShowLangSelect(true)} />
             )}
-
-            {/* Lang select */}
             {showLangSelect && (
-                <LangSelect onSelect={() => {
-                    setShowLangSelect(false);
-                    window.location.reload();
-                }} />
+                <LangSelect onSelect={() => { setShowLangSelect(false); window.location.reload(); }} />
             )}
-
             <BottomNav />
         </div>
     );
@@ -357,20 +399,10 @@ function ProductCard({ product, inCart, onPress, onAdd }) {
 
             {/* Info */}
             <div style={{ padding: '10px 12px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: '#1A1A1A', lineHeight: 1.3, marginBottom: 6, flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: '#1A1A1A', lineHeight: 1.3, flex: 1, marginBottom: 8 }}>
                     {product.name}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                        <div style={{ fontWeight: 800, fontSize: 14, color: '#1A1A1A' }}>
-                            {(product.price || 0).toLocaleString()} so'm
-                        </div>
-                        {product.discountPrice && (
-                            <div style={{ fontSize: 11, color: '#999', textDecoration: 'line-through', marginTop: 1 }}>
-                                {product.discountPrice.toLocaleString()} so'm
-                            </div>
-                        )}
-                    </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
                     {/* + button */}
                     <button
                         onClick={e => { e.stopPropagation(); onAdd(); }}
@@ -393,3 +425,4 @@ function ProductCard({ product, inCart, onPress, onAdd }) {
         </div>
     );
 }
+
