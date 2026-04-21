@@ -12,6 +12,7 @@ export default function Payment() {
     const method = params.get('method');
     const total = parseInt(params.get('total') || '0');
     const orderNum = params.get('orderNum') || orderId?.slice(-6).toUpperCase();
+    const payUrlFromServer = decodeURIComponent(params.get('payUrl') || '');
 
     const [status, setStatus] = useState('pending');
     const [order, setOrder] = useState(null);
@@ -28,13 +29,12 @@ export default function Payment() {
 
         const poll = async () => {
             try {
-                const r = await api.get(`/orders/${orderId}`);
-                const o = r.data;
-                setOrder(o);
-                if (o.paymentStatus === 'paid') {
+                const r = await api.get(`/payment/status/${orderId}`);
+                setOrder(r.data);
+                if (r.data.paymentStatus === 'paid') {
                     setStatus('paid');
                     clearInterval(pollRef.current);
-                } else if (o.paymentStatus === 'failed') {
+                } else if (r.data.paymentStatus === 'failed') {
                     setStatus('failed');
                     clearInterval(pollRef.current);
                 }
@@ -49,12 +49,15 @@ export default function Payment() {
     const handleManualConfirm = async () => {
         setChecking(true);
         try {
-            const r = await api.get(`/orders/${orderId}`);
-            if (r.data.paymentStatus === 'paid') {
+            // Payme: local state check. Click: Click API orqali tekshirish
+            const checkEndpoint = method === 'click' ? `/payment/click/check/${orderId}` : `/payment/payme/check/${orderId}`;
+            const r = await api.get(checkEndpoint);
+            if (r.data.paid) {
                 setStatus('paid');
-                setOrder(r.data);
+                const s = await api.get(`/payment/status/${orderId}`);
+                setOrder(s.data);
             } else {
-                alert(t('paymentNotConfirmed'));
+                alert(r.data.message || t('paymentNotConfirmed'));
             }
         } catch {
             alert(t('serverConnectError'));
@@ -70,7 +73,7 @@ export default function Payment() {
 
     // ── Paid ──
     if (status === 'paid') {
-        return <SuccessScreen orderNum={orderNum} navigate={navigate} bonusEarned={order?.bonusEarned || 0} />;
+        return <SuccessScreen orderNum={order?.orderNumber || orderNum} navigate={navigate} bonusEarned={order?.bonusEarned || 0} />;
     }
 
     // ── Failed ──
@@ -94,9 +97,9 @@ export default function Payment() {
 
     // ── Pending ──
     const providerName = method === 'payme' ? 'Payme' : 'Click';
-    const payUrl = method === 'payme'
+    const payUrl = payUrlFromServer || (method === 'payme'
         ? `https://checkout.paycom.uz/${import.meta.env.VITE_PAYME_ID}?amount=${total * 100}&order=${orderId}`
-        : `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID}&amount=${total}&transaction_param=${orderId}`;
+        : `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID}&amount=${total}&transaction_param=${orderId}`);
 
     return (
         <div style={pageStyle}>

@@ -6,3 +6,7 @@ dist/
 uploads/*
 !uploads/.gitkeep
 !backend/public/uploads/menu/
+
+# Local image backups
+backend/public/uploads/menu_original/
+

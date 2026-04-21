@@ -95,7 +95,37 @@ router.post('/', authTelegram, async (req, res) => {
             await BonusService.spendBonus(user, order, actualBonusDiscount);
         }
 
-        res.status(201).json(order);
+        // To'lov URL yaratish
+        let paymentUrl = '';
+        const returnUrl = process.env.WEBAPP_URL || process.env.FRONTEND_URL || '';
+        if (paymentMethod === 'click') {
+            const params = new URLSearchParams({
+                service_id: process.env.CLICK_SERVICE_ID || '',
+                merchant_id: process.env.CLICK_MERCHANT_ID || '',
+                amount: String(total),
+                transaction_param: order.orderNumber,
+            });
+            if (process.env.CLICK_MERCHANT_USER_ID) {
+                params.set('merchant_user_id', process.env.CLICK_MERCHANT_USER_ID);
+            }
+            if (returnUrl) params.set('return_url', returnUrl);
+            paymentUrl = `https://my.click.uz/services/pay?${params}`;
+        } else if (paymentMethod === 'payme') {
+            const paymeData = Buffer.from(
+                `m=${process.env.PAYME_MERCHANT_ID};ac.order_id=${order.orderNumber};a=${total * 100};l=uz`
+            ).toString('base64');
+            paymentUrl = `https://checkout.paycom.uz/${paymeData}`;
+        }
+
+        res.status(201).json({
+            _id: order._id,
+            orderNumber: order.orderNumber,
+            total: order.total,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            paymentMethod: order.paymentMethod,
+            paymentUrl,
+        });
     } catch (err) {
         console.error('Order create error:', err);
         res.status(500).json({ error: err.message });

@@ -125,10 +125,11 @@ export default function Cart() {
             clearCart();
 
             const orderNum = r.data.orderNumber || r.data._id?.slice(-6).toUpperCase();
+            const payUrl = encodeURIComponent(r.data.paymentUrl || '');
             if (paymentMethod === 'payme') {
-                navigate(`/payment?orderId=${r.data._id}&method=payme&total=${grandTotal}&orderNum=${orderNum}`);
+                navigate(`/payment?orderId=${r.data._id}&method=payme&total=${grandTotal}&orderNum=${orderNum}&payUrl=${payUrl}`);
             } else if (paymentMethod === 'click') {
-                navigate(`/payment?orderId=${r.data._id}&method=click&total=${grandTotal}&orderNum=${orderNum}`);
+                navigate(`/payment?orderId=${r.data._id}&method=click&total=${grandTotal}&orderNum=${orderNum}&payUrl=${payUrl}`);
             } else {
                 navigate(`/payment?orderId=${r.data._id}&method=cash&orderNum=${orderNum}`);
             }

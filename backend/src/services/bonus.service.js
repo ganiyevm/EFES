@@ -25,7 +25,7 @@ class BonusService {
             type: 'earned',
             amount: points,
             order: order._id,
-            description: `EFES-${order.orderNumber} buyurtmasidan ${points} ball`,
+            description: `${order.orderNumber} buyurtmasidan ${points} ball`,
         });
     }
 
