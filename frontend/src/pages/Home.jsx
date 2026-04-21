@@ -355,15 +355,13 @@ function ProductCard({ product, inCart, onPress, onAdd }) {
             onTouchStart={e => e.currentTarget.style.transform = 'scale(0.97)'}
             onTouchEnd={e => e.currentTarget.style.transform = 'scale(1)'}
         >
-            {/* Image (bottom price banner cropped via scale + top origin) */}
+            {/* Image */}
             <div style={{ height: 150, position: 'relative', flexShrink: 0, background: '#fff', overflow: 'hidden' }}>
                 <img
                     src={getProductImage(product)}
                     alt={product.name}
                     style={{
                         width: '100%', height: '100%', objectFit: 'cover',
-                        objectPosition: 'center top',
-                        transform: 'scale(1.25)', transformOrigin: 'center top',
                         display: 'block',
                     }}
                     onError={e => { e.target.src = '/uploads/menu/assartitaom.jpg'; }}
