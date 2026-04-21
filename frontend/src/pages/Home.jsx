@@ -270,12 +270,10 @@ export default function Home() {
                                 {/* Section header */}
                                 {!search && (
                                     <div style={{
-                                        fontWeight: 800, fontSize: 16, color: '#1A1A1A',
-                                        padding: '16px 0 10px',
-                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        fontWeight: 900, fontSize: 24, color: '#1A1A1A',
+                                        padding: '20px 0 14px', letterSpacing: -0.5,
                                     }}>
-                                        <span>{catInfo?.icon}</span>
-                                        <span>{catInfo?.label || group.key}</span>
+                                        {catInfo?.label || group.key}
                                     </div>
                                 )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
@@ -357,61 +355,75 @@ function ProductCard({ product, inCart, onPress, onAdd }) {
             onTouchStart={e => e.currentTarget.style.transform = 'scale(0.97)'}
             onTouchEnd={e => e.currentTarget.style.transform = 'scale(1)'}
         >
-            {/* Image */}
-            <div style={{ height: 130, position: 'relative', flexShrink: 0, background: '#F0EBE3' }}>
+            {/* Image (bottom price banner cropped via scale + top origin) */}
+            <div style={{ height: 150, position: 'relative', flexShrink: 0, background: '#fff', overflow: 'hidden' }}>
                 <img
                     src={getProductImage(product)}
                     alt={product.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    style={{
+                        width: '100%', height: '100%', objectFit: 'cover',
+                        objectPosition: 'center top',
+                        transform: 'scale(1.25)', transformOrigin: 'center top',
+                        display: 'block',
+                    }}
                     onError={e => { e.target.src = '/uploads/menu/assartitaom.jpg'; }}
                 />
-                {/* Badge */}
+                {/* Badges */}
                 {product.isNew && (
                     <div style={{
-                        position: 'absolute', top: 8, left: 8,
-                        background: '#1A3A5C', color: '#fff',
-                        fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                        position: 'absolute', top: 10, left: 10,
+                        background: '#E91E63', color: '#fff',
+                        fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
                     }}>Yangi mahsulot</div>
                 )}
                 {product.isPopular && !product.isNew && (
                     <div style={{
-                        position: 'absolute', top: 8, left: 8,
+                        position: 'absolute', top: 10, left: 10,
                         background: '#C1440E', color: '#fff',
-                        fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                        fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
                     }}>Mashhur</div>
                 )}
-                {product.discountPrice && (
-                    <div style={{
-                        position: 'absolute', top: 8, left: 8,
-                        background: '#C1440E', color: '#fff',
-                        fontSize: 9, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
-                    }}>Aksiya</div>
-                )}
+                {/* + button (on image, bottom-right) */}
+                <button
+                    onClick={e => { e.stopPropagation(); onAdd(); }}
+                    style={{
+                        position: 'absolute', bottom: 10, right: 10,
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: inCart > 0 ? '#C1440E' : '#fff',
+                        border: 'none',
+                        color: inCart > 0 ? '#fff' : '#333',
+                        fontSize: inCart > 0 ? 14 : 20,
+                        fontWeight: 700, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        transition: 'all 0.2s',
+                    }}
+                >
+                    {inCart > 0 ? inCart : '+'}
+                </button>
             </div>
 
             {/* Info */}
-            <div style={{ padding: '10px 12px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: '#1A1A1A', lineHeight: 1.3, flex: 1, marginBottom: 8 }}>
-                    {product.name}
+            <div style={{ padding: '12px 14px 14px' }}>
+                {/* Price row */}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 900, fontSize: 18, color: '#1A1A1A', letterSpacing: -0.3 }}>
+                        {(product.price || 0).toLocaleString('ru-RU')}
+                    </span>
+                    {product.discountPrice && (
+                        <span style={{ fontSize: 13, color: '#B0B0B0', textDecoration: 'line-through', fontWeight: 500 }}>
+                            {product.discountPrice.toLocaleString('ru-RU')}
+                        </span>
+                    )}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                    {/* + button */}
-                    <button
-                        onClick={e => { e.stopPropagation(); onAdd(); }}
-                        style={{
-                            width: 36, height: 36, borderRadius: '50%',
-                            background: inCart > 0 ? '#C1440E' : '#F5F0E8',
-                            border: `2px solid ${inCart > 0 ? '#C1440E' : '#E0D8CC'}`,
-                            color: inCart > 0 ? '#fff' : '#333',
-                            fontSize: inCart > 0 ? 13 : 20,
-                            fontWeight: 800, cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            transition: 'all 0.2s',
-                            flexShrink: 0,
-                        }}
-                    >
-                        {inCart > 0 ? inCart : '+'}
-                    </button>
+                {/* Name — uppercase */}
+                <div style={{
+                    fontSize: 12, color: '#888', fontWeight: 600,
+                    textTransform: 'uppercase', letterSpacing: 0.5,
+                    lineHeight: 1.3, whiteSpace: 'nowrap',
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                    {product.name}
                 </div>
             </div>
         </div>
