@@ -459,11 +459,12 @@ export default function Cart() {
                     </div>
                 </div>
 
-                {/* ── Order Button ── */}
+                {/* ── Order Button — BottomNav ustida joylashtirilgan ── */}
                 <div style={{
-                    position: 'fixed', bottom: 0, left: 0, right: 0,
+                    position: 'fixed', bottom: 72, left: 0, right: 0,
                     background: 'rgba(13,13,20,0.95)', borderTop: '1px solid var(--border)',
-                    padding: '12px 16px 28px', backdropFilter: 'blur(20px)',
+                    padding: '12px 16px 12px', backdropFilter: 'blur(20px)',
+                    zIndex: 110,
                 }}>
                     <button
                         onClick={handleOrder}
