@@ -6,11 +6,12 @@ import { useT } from '../i18n';
 import api from '../api';
 import BottomNav from '../components/BottomNav';
 import MapModal from '../components/MapModal';
+import { PaymentIcon } from '../components/BrandIcon';
 
 const PAY_METHODS = [
-    { key: 'payme', label: 'Payme', color: '#00AAFF' },
-    { key: 'click', label: 'Click', color: '#00C853' },
-    { key: 'cash', label: 'Naqd', color: '#F0C040' },
+    { key: 'payme', label: 'Payme' },
+    { key: 'click', label: 'Click' },
+    { key: 'cash', label: 'Naqd' },
 ];
 
 export default function Cart() {
@@ -34,6 +35,12 @@ export default function Cart() {
     const [apartment, setApartment] = useState('');
     const [comment, setComment] = useState('');
     const [showMap, setShowMap] = useState(false);
+    const [coords, setCoords] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem('efes_coords') || 'null');
+            return saved && typeof saved.lat === 'number' ? saved : null;
+        } catch { return null; }
+    });
 
     // Delivery time
     const [deliveryDate, setDeliveryDate] = useState(todayStr());
@@ -46,6 +53,13 @@ export default function Cart() {
     const [branches, setBranches] = useState([]);
     const [selectedBranch, setSelectedBranch] = useState('');
 
+    // Delivery config (admin sozlamalari)
+    const [deliveryConfig, setDeliveryConfig] = useState({
+        deliveryCost: 10000,
+        freeDeliveryThreshold: 0,
+        maxBonusPercent: 20,
+    });
+
     // Bonus & promo
     const [useBonus, setUseBonus] = useState(false);
     const [promoInput, setPromoInput] = useState('');
@@ -56,8 +70,9 @@ export default function Cart() {
     const [submitting, setSubmitting] = useState(false);
 
     const totalItems = items.reduce((s, i) => s + i.qty, 0);
-    const deliveryCost = deliveryType === 'delivery' ? 10000 : 0;
-    const maxBonus = Math.floor(totalPrice * 0.2);
+    const freeDelivery = deliveryConfig.freeDeliveryThreshold > 0 && totalPrice >= deliveryConfig.freeDeliveryThreshold;
+    const deliveryCost = deliveryType === 'delivery' ? (freeDelivery ? 0 : deliveryConfig.deliveryCost) : 0;
+    const maxBonus = Math.floor(totalPrice * (deliveryConfig.maxBonusPercent / 100));
     const actualBonus = useBonus ? Math.min(user?.bonusPoints || 0, maxBonus) : 0;
     const promoDiscount = promoData?.discountAmount || 0;
     const grandTotal = totalPrice - actualBonus - promoDiscount + deliveryCost;
@@ -67,6 +82,9 @@ export default function Cart() {
             const active = (r.data || []).filter(b => b.isActive);
             setBranches(active);
             if (active.length === 1) setSelectedBranch(active[0]._id);
+        }).catch(() => { });
+        api.get('/delivery/config').then(r => {
+            setDeliveryConfig(prev => ({ ...prev, ...r.data }));
         }).catch(() => { });
     }, []);
 
@@ -88,8 +106,13 @@ export default function Cart() {
         }
     };
 
-    const handleMapConfirm = (addr) => {
+    const handleMapConfirm = (addr, c) => {
         setAddress(addr);
+        if (c && typeof c.lat === 'number' && typeof c.lng === 'number') {
+            setCoords({ lat: c.lat, lng: c.lng });
+            localStorage.setItem('efes_coords', JSON.stringify({ lat: c.lat, lng: c.lng }));
+        }
+        localStorage.setItem('efes_address', addr);
         setShowMap(false);
     };
 
@@ -111,6 +134,8 @@ export default function Cart() {
                 items: items.map(i => ({ productId: i.productId, qty: i.qty, note: i.note || '' })),
                 deliveryType,
                 address: fullAddress,
+                addressLat: deliveryType === 'delivery' ? coords?.lat : undefined,
+                addressLng: deliveryType === 'delivery' ? coords?.lng : undefined,
                 branch: selectedBranch || branches[0]?._id,
                 paymentMethod,
                 phone: user?.phone || '',
@@ -278,27 +303,37 @@ export default function Cart() {
                     </Section>
                 ) : (
                     <Section title="🏢 Filialni tanlang">
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {branches.map(b => (
-                                <label key={b._id} style={{
-                                    display: 'flex', alignItems: 'center', gap: 12,
-                                    padding: '13px 16px', background: 'var(--bg-card)',
-                                    border: `1.5px solid ${selectedBranch === b._id ? 'var(--primary)' : 'var(--border)'}`,
-                                    borderRadius: 14, cursor: 'pointer',
-                                    boxShadow: selectedBranch === b._id ? '0 0 0 3px rgba(212,160,23,0.08)' : 'none',
-                                }}>
-                                    <input type="radio" name="branch" value={b._id}
-                                        checked={selectedBranch === b._id}
-                                        onChange={() => setSelectedBranch(b._id)}
-                                        style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
-                                    />
-                                    <div>
-                                        <div style={{ fontWeight: 700, fontSize: 14 }}>{b.name || `Filial #${b.number}`}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{b.address}</div>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
+                        {branches.length === 0 ? (
+                            <div style={{
+                                padding: '16px 14px', background: 'var(--bg-card)',
+                                border: '1px dashed var(--border)', borderRadius: 14,
+                                color: 'var(--text-secondary)', fontSize: 13, textAlign: 'center',
+                            }}>
+                                Hozircha faol filial yo'q. Iltimos, yetkazib berishni tanlang.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {branches.map(b => (
+                                    <label key={b._id} style={{
+                                        display: 'flex', alignItems: 'center', gap: 12,
+                                        padding: '13px 16px', background: 'var(--bg-card)',
+                                        border: `1.5px solid ${selectedBranch === b._id ? 'var(--primary)' : 'var(--border)'}`,
+                                        borderRadius: 14, cursor: 'pointer',
+                                        boxShadow: selectedBranch === b._id ? '0 0 0 3px rgba(212,160,23,0.08)' : 'none',
+                                    }}>
+                                        <input type="radio" name="branch" value={b._id}
+                                            checked={selectedBranch === b._id}
+                                            onChange={() => setSelectedBranch(b._id)}
+                                            style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
+                                        />
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: 14 }}>{b.name || `Filial #${b.number}`}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{b.address}</div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                        )}
                     </Section>
                 )}
 
@@ -357,10 +392,7 @@ export default function Cart() {
                                     onChange={() => setPaymentMethod(m.key)}
                                     style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
                                 />
-                                <div style={{
-                                    width: 10, height: 10, borderRadius: '50%',
-                                    background: m.color, flexShrink: 0,
-                                }} />
+                                <PaymentIcon method={m.key} size={24} />
                                 <span style={{ fontWeight: 600, fontSize: 15 }}>{m.label}</span>
                             </label>
                         ))}

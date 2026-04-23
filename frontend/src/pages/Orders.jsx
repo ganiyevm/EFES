@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
 import api from '../api';
 import BottomNav from '../components/BottomNav';
+import { PaymentIcon } from '../components/BrandIcon';
 
 const STATUS_COLORS = {
     awaiting_payment: { color: '#f39c12', bg: 'rgba(243,156,18,0.1)' },
@@ -22,7 +23,6 @@ const STATUS_ICONS = {
     delivered: '🎉', rejected: '❌', cancelled: '❌',
 };
 
-const PAY_ICONS = { cash: '💵', payme: '💳', click: '💙' };
 
 function StatusBadge({ status, t }) {
     const c = STATUS_COLORS[status] || { color: '#999', bg: 'rgba(153,153,153,0.1)' };
@@ -43,9 +43,13 @@ function StatusBadge({ status, t }) {
 
 function OrderDetail({ order, onClose, t }) {
     const payKey = `pay_${order.paymentMethod}`;
-    const payLabel = t(payKey) !== payKey
-        ? `${PAY_ICONS[order.paymentMethod] || '💳'} ${t(payKey)}`
-        : `${PAY_ICONS[order.paymentMethod] || '💳'} ${order.paymentMethod}`;
+    const payText = t(payKey) !== payKey ? t(payKey) : order.paymentMethod;
+    const payLabel = (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <PaymentIcon method={order.paymentMethod} size={18} />
+            {payText}
+        </span>
+    );
 
     return (
         <div
@@ -122,7 +126,7 @@ function OrderDetail({ order, onClose, t }) {
                 {order.branch?.name && <InfoRow label={`🏢 ${t('branch')}`} value={order.branch.name} />}
                 {order.branch?.phone && <InfoRow label={`📞 ${t('orderBranchPhone')}`} value={order.branch.phone} />}
                 <InfoRow label={`📍 ${t('orderAddr')}`} value={order.address || (order.deliveryType === 'pickup' ? t('pickup') : '—')} />
-                <InfoRow label={`💳 ${t('paymentTitle')}`} value={payLabel} />
+                <InfoRow label={t('paymentTitle')} value={payLabel} />
                 {order.notes && <InfoRow label={`📝 ${t('orderNote')}`} value={order.notes} />}
 
                 <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
