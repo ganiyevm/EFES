@@ -127,10 +127,11 @@ class ClickService {
             if (user) await BonusService.earnBonus(user, order);
         } catch (e) { console.error('[CLICK] Bonus error:', e.message); }
 
-        // Operator xabarnomasi
+        // Operator + mijoz xabarnomasi
         try {
             const TelegramService = require('./telegram.service');
             await TelegramService.notifyOperator(order);
+            await TelegramService.notifyCustomerStatus(order, { note: "Click orqali to'lov tasdiqlandi" });
         } catch (e) { console.error('[CLICK] Telegram error:', e.message); }
     }
 }

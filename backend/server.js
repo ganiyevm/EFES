@@ -56,6 +56,26 @@ app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/delivery', require('./src/routes/delivery'));
 app.use('/api/promotions', require('./src/routes/promotions'));
+app.use('/api/couriers', require('./src/routes/couriers'));
+
+// ─── Kurier botlari webhook (broadcast + mission) ───
+const CourierBotService = require('./src/services/courierBot.service');
+app.post('/courier-webhook', (req, res) => {
+    const secret = req.headers['x-telegram-bot-api-secret-token'];
+    if (secret !== CourierBotService.webhookSecret) {
+        return res.status(403).json({ ok: false });
+    }
+    res.json({ ok: true });
+    CourierBotService.handleBroadcastUpdate(req.body).catch(e => console.error('Broadcast webhook:', e.message));
+});
+app.post('/courier-mission-webhook', (req, res) => {
+    const secret = req.headers['x-telegram-bot-api-secret-token'];
+    if (secret !== CourierBotService.webhookSecret) {
+        return res.status(403).json({ ok: false });
+    }
+    res.json({ ok: true });
+    CourierBotService.handleMissionUpdate(req.body).catch(e => console.error('Mission webhook:', e.message));
+});
 
 // ─── Telegram Bot Webhook Proxy ───
 const http = require('http');
@@ -126,6 +146,7 @@ const start = async () => {
     require('./src/jobs/dailyAnalytics');
     app.listen(PORT, () => {
         console.log(`🍽 EFES Delivery API ishga tushdi: http://localhost:${PORT}`);
+        CourierBotService.registerWebhooks().catch(e => console.error('Kurier bot:', e.message));
     });
 };
 

@@ -5,7 +5,9 @@ const Branch = require('../models/Branch');
 const User = require('../models/User');
 const AdminAccount = require('../models/AdminAccount');
 const Settings = require('../models/Settings');
-const BonusService = require('../services/bonus.service');
+const TelegramService = require('../services/telegram.service');
+const CourierBotService = require('../services/courierBot.service');
+const OrderStatusService = require('../services/orderStatus.service');
 const bcrypt = require('bcryptjs');
 const { authAdmin } = require('../middleware/auth');
 
@@ -73,11 +75,71 @@ router.get('/orders', async (req, res) => {
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const [orders, total] = await Promise.all([
-            Order.find(filter).populate('branch', 'name number').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+            Order.find(filter)
+                .populate('branch', 'name number')
+                .populate('courierId', 'name phone carPlate')
+                .sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
             Order.countDocuments(filter),
         ]);
 
         res.json({ orders, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Bitta buyurtma (Admin) ───
+router.get('/orders/:id', async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id)
+            .populate('branch', 'name number')
+            .populate('courierId', 'name phone carPlate');
+        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        res.json(order);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Buyurtmaga kurier tayinlash ───
+router.patch('/orders/:id/assign-courier', async (req, res) => {
+    try {
+        const Courier = require('../models/Courier');
+        const { courierId } = req.body;
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+        if (!courierId) {
+            order.courierId = null;
+            order.statusHistory.push({ status: order.status, changedBy: 'admin', note: 'Kurier olib tashlandi' });
+        } else {
+            const courier = await Courier.findById(courierId);
+            if (!courier) return res.status(404).json({ error: 'Kurier topilmadi' });
+            if (!courier.isActive) return res.status(400).json({ error: 'Kurier nofaol' });
+            order.courierId = courier._id;
+            order.statusHistory.push({
+                status: order.status,
+                changedBy: 'admin',
+                note: `Kurier tayinlandi: ${courier.name} (${courier.phone})`,
+            });
+        }
+        await order.save();
+        const populated = await Order.findById(order._id)
+            .populate('branch', 'name number')
+            .populate('courierId', 'name phone carPlate');
+
+        if (populated.courierId) {
+            TelegramService.notifyCustomerStatus(populated, {
+                note: 'Buyurtmangizga kurier tayinlandi',
+                courier: {
+                    name: populated.courierId.name,
+                    phone: populated.courierId.phone,
+                    carPlate: populated.courierId.carPlate,
+                },
+            }).catch(() => {});
+        }
+
+        res.json(populated);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -90,22 +152,20 @@ router.patch('/orders/:id/status', async (req, res) => {
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
-        order.status = status;
-        order.statusHistory.push({ status, changedBy: 'admin', note: note || '' });
+        const prevStatus = order.status;
+        await OrderStatusService.applyTransition(order, status, { changedBy: 'admin', note: note || '' });
 
-        if (status === 'confirmed') order.confirmedAt = new Date();
-        if (status === 'preparing') order.preparingAt = new Date();
-        if (status === 'ready') order.readyAt = new Date();
-        if (status === 'on_the_way') order.dispatchedAt = new Date();
-        if (status === 'delivered') {
-            order.deliveredAt = new Date();
-            if (order.paymentMethod === 'cash') order.paymentStatus = 'paid';
-            // Bonus hisoblash
-            const user = await User.findById(order.user);
-            if (user) await BonusService.earnBonus(user, order);
+        TelegramService.notifyCustomerStatus(order, { note: note || '' }).catch(() => {});
+
+        // Tasdiqlanganda kurierlar botiga broadcast (faqat tayinlanmagan bo'lsa)
+        if (status === 'confirmed' && prevStatus !== 'confirmed' && !order.courierId) {
+            CourierBotService.broadcastNewOrder(order).catch(e => console.error('Courier broadcast:', e.message));
+        }
+        // Bekor qilinsa — broadcast xabarlarini tozalash
+        if ((status === 'cancelled' || status === 'rejected') && order.courierBroadcasts?.length) {
+            CourierBotService.clearBroadcasts(order._id).catch(() => {});
         }
 
-        await order.save();
         res.json(order);
     } catch (err) {
         res.status(500).json({ error: err.message });

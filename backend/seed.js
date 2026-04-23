@@ -7,6 +7,7 @@ const MONGODB_URI = process.env.MONGODB_URI;
 // ─── Models ───
 const Product = require('./src/models/Product');
 const AdminAccount = require('./src/models/AdminAccount');
+const Branch = require('./src/models/Branch');
 
 const products = [
     // ── Kebab ──
@@ -44,6 +45,26 @@ async function seed() {
         console.log(`✅ ${products.length} ta mahsulot qo'shildi`);
     } else {
         console.log(`ℹ️ ${existing} ta mahsulot allaqachon bor — o'tkazildi`);
+    }
+
+    // Default filial
+    const branchExists = await Branch.countDocuments();
+    if (branchExists === 0) {
+        await Branch.create({
+            number: 1,
+            name: 'Chilonzor',
+            address: 'Toshkent, Chilonzor tumani',
+            phone: '+998 71 200 00 00',
+            hours: '10:00 — 23:00',
+            location: { lat: 41.2995, lng: 69.2401 },
+            deliveryRadius: 10,
+            minOrderAmount: 30000,
+            isActive: true,
+            isOpen: true,
+        });
+        console.log("✅ Default filial qo'shildi: Chilonzor");
+    } else {
+        console.log(`ℹ️ ${branchExists} ta filial allaqachon bor`);
     }
 
     // Admin hisob

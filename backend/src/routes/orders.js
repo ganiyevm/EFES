@@ -4,7 +4,9 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const Promotion = require('../models/Promotion');
 const BonusService = require('../services/bonus.service');
+const TelegramService = require('../services/telegram.service');
 const { authTelegram } = require('../middleware/auth');
+const { getDeliveryConfig } = require('../utils/deliveryConfig');
 
 // ─── Yangi buyurtma ───
 router.post('/', authTelegram, async (req, res) => {
@@ -30,10 +32,13 @@ router.post('/', authTelegram, async (req, res) => {
             });
         }
 
-        // Bonus tekshirish
+        // Delivery config (admin sozlamalari)
+        const cfg = await getDeliveryConfig();
+
+        // Bonus tekshirish — admin sozlagan maxBonusPercent bo'yicha
         let actualBonusDiscount = 0;
         if (bonusDiscount > 0) {
-            const maxBonus = Math.floor(subtotal * 0.2); // max 20%
+            const maxBonus = Math.floor(subtotal * (cfg.maxBonusPercent / 100));
             actualBonusDiscount = Math.min(bonusDiscount, user.bonusPoints, maxBonus);
         }
 
@@ -63,7 +68,14 @@ router.post('/', authTelegram, async (req, res) => {
             }
         }
 
-        const deliveryCost = deliveryType === 'delivery' ? 10000 : 0;
+        // Delivery narxi — admin sozlagan qiymat. Agar freeDeliveryThreshold o'rnatilgan va subtotal undan katta bo'lsa — bepul
+        let deliveryCost = 0;
+        if (deliveryType === 'delivery') {
+            deliveryCost = cfg.deliveryCost;
+            if (cfg.freeDeliveryThreshold > 0 && subtotal >= cfg.freeDeliveryThreshold) {
+                deliveryCost = 0;
+            }
+        }
         const total = subtotal - actualBonusDiscount - promoDiscount + deliveryCost;
 
         const order = await Order.create({
@@ -115,6 +127,12 @@ router.post('/', authTelegram, async (req, res) => {
                 `m=${process.env.PAYME_MERCHANT_ID};ac.order_id=${order.orderNumber};a=${total * 100};l=uz`
             ).toString('base64');
             paymentUrl = `https://checkout.paycom.uz/${paymeData}`;
+        }
+
+        // Mijozga tasdiq + (naqd to'lovda) operatorga xabar
+        TelegramService.notifyCustomerOrderCreated(order).catch(() => {});
+        if (paymentMethod === 'cash') {
+            TelegramService.notifyOperator(order).catch(() => {});
         }
 
         res.status(201).json({
@@ -177,6 +195,9 @@ router.patch('/:id/cancel', authTelegram, async (req, res) => {
         }
 
         await order.save();
+
+        TelegramService.notifyCustomerStatus(order, { note: "Siz tomoningizdan bekor qilindi" }).catch(() => {});
+
         res.json(order);
     } catch (err) {
         res.status(500).json({ error: err.message });

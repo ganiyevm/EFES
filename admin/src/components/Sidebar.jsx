@@ -5,6 +5,7 @@ const NAV = [
     { to: '/admin/orders', icon: '📋', label: 'Buyurtmalar' },
     { to: '/admin/products', icon: '🍽', label: 'Mahsulotlar' },
     { to: '/admin/branches', icon: '🏢', label: 'Filiallar' },
+    { to: '/admin/couriers', icon: '🏍', label: 'Kuriyerlar' },
     { to: '/admin/users', icon: '👥', label: 'Foydalanuvchilar' },
     { to: '/admin/promotions', icon: '🎁', label: 'Aksiyalar' },
     { to: '/admin/import', icon: '📥', label: 'Import' },

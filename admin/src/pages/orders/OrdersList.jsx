@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
+import { PaymentBadge, YandexIcon } from '../../components/BrandIcon';
 
 const STATUSES = [
     { key: '', label: 'Barchasi' },
@@ -51,6 +52,7 @@ export default function OrdersList() {
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState(null);
     const [updating, setUpdating] = useState(false);
+    const [couriers, setCouriers] = useState([]);
     const limit = 20;
 
     const fetchOrders = useCallback(() => {
@@ -65,6 +67,24 @@ export default function OrdersList() {
 
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
     useEffect(() => { const id = setInterval(fetchOrders, 15000); return () => clearInterval(id); }, [fetchOrders]);
+    useEffect(() => {
+        api.get('/couriers')
+            .then(r => setCouriers((r.data || []).filter(c => c.isActive)))
+            .catch(() => { });
+    }, []);
+
+    const handleAssignCourier = async (orderId, courierId) => {
+        setUpdating(true);
+        try {
+            const r = await api.patch(`/admin/orders/${orderId}/assign-courier`, { courierId: courierId || null });
+            if (selected?._id === orderId) setSelected(r.data);
+            fetchOrders();
+        } catch (err) {
+            alert('Xatolik: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setUpdating(false);
+        }
+    };
 
     const handleStatusChange = async (orderId, newStatus, note = '') => {
         setUpdating(true);
@@ -143,16 +163,30 @@ export default function OrdersList() {
                                         </td>
                                         <td><strong>{(o.total || 0).toLocaleString()} so'm</strong></td>
                                         <td>
-                                            <span style={{ fontSize: 12 }}>
-                                                {o.paymentMethod === 'cash' ? '💵 Naqd' : o.paymentMethod === 'payme' ? '💳 Payme' : '💙 Click'}
-                                            </span>
+                                            <PaymentBadge method={o.paymentMethod} size={16} />
                                         </td>
                                         <td>
                                             <span className={`badge ${STATUS_BADGE_MAP[o.status] || 'badge-gray'}`}>
                                                 {STATUS_ICONS[o.status]} {STATUS_LABELS[o.status] || o.status}
                                             </span>
                                         </td>
-                                        <td style={{ fontSize: 12 }}>#{o.branch?.number} {o.branch?.name}</td>
+                                        <td style={{ fontSize: 12 }}>
+                                            <div>#{o.branch?.number} {o.branch?.name}</div>
+                                            {o.addressLat && o.addressLng && (
+                                                <a
+                                                    href={mapsLink(o.addressLat, o.addressLng)}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    onClick={e => e.stopPropagation()}
+                                                    style={{ fontSize: 11, color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                                ><YandexIcon size={14} /> Xaritada</a>
+                                            )}
+                                            {o.courierId?.name && (
+                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                                                    🏍 {o.courierId.name}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                                             {new Date(o.createdAt).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                         </td>
@@ -193,13 +227,25 @@ export default function OrdersList() {
 
             {/* Detail modal */}
             {selected && (
-                <OrderDetailModal order={selected} onClose={() => setSelected(null)} onStatusChange={handleStatusChange} updating={updating} />
+                <OrderDetailModal
+                    order={selected}
+                    onClose={() => setSelected(null)}
+                    onStatusChange={handleStatusChange}
+                    onAssignCourier={handleAssignCourier}
+                    couriers={couriers}
+                    updating={updating}
+                />
             )}
         </div>
     );
 }
 
-function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
+function mapsLink(lat, lng) {
+    if (!lat || !lng) return null;
+    return `https://yandex.com/maps/?pt=${lng},${lat}&z=17&l=map`;
+}
+
+function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, couriers, updating }) {
     const [note, setNote] = useState('');
 
     return (
@@ -213,7 +259,7 @@ function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
                         <span className={`badge ${STATUS_BADGE_MAP[order.status]}`}>{STATUS_ICONS[order.status]} {STATUS_LABELS[order.status]}</span>
                         <span className="badge badge-gray">
-                            {order.paymentMethod === 'cash' ? '💵 Naqd' : order.paymentMethod === 'payme' ? '💳 Payme' : '💙 Click'}
+                            <PaymentBadge method={order.paymentMethod} size={18} />
                         </span>
                         <span className={`badge ${order.paymentStatus === 'paid' ? 'badge-success' : 'badge-warning'}`}>
                             {order.paymentStatus === 'paid' ? '✅ To\'langan' : "⏳ To'lanmagan"}
@@ -226,8 +272,61 @@ function OrderDetailModal({ order, onClose, onStatusChange, updating }) {
                         <InfoCell label="Yetkazish" value={order.deliveryType === 'delivery' ? '🚗 Yetkazib berish' : '🏃 Olib ketish'} />
                         <InfoCell label="Filial" value={`#${order.branch?.number} ${order.branch?.name || ''}`} />
                         {order.address && <InfoCell label="Manzil" value={order.address} span={2} />}
+                        {order.addressLat && order.addressLng && (
+                            <div style={{ gridColumn: 'span 2' }}>
+                                <a
+                                    href={mapsLink(order.addressLat, order.addressLng)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="btn btn-outline btn-sm"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
+                                >
+                                    <YandexIcon size={18} />
+                                    Yandex Xaritada ochish ({order.addressLat.toFixed(4)}, {order.addressLng.toFixed(4)})
+                                </a>
+                            </div>
+                        )}
                         {order.notes && <InfoCell label="Izoh" value={order.notes} span={2} />}
                     </div>
+
+                    {/* Kurier tayinlash (faqat delivery turida) */}
+                    {order.deliveryType === 'delivery' && ['confirmed', 'preparing', 'ready', 'on_the_way', 'delivered'].includes(order.status) && (
+                        <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🏍 Kurier</div>
+                            {order.courierId ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                                    <div style={{ fontSize: 13 }}>
+                                        <div style={{ fontWeight: 600 }}>{order.courierId.name}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            {order.courierId.phone} {order.courierId.carPlate && `• ${order.courierId.carPlate}`}
+                                        </div>
+                                    </div>
+                                    {order.status !== 'delivered' && (
+                                        <button
+                                            className="btn btn-outline btn-sm"
+                                            disabled={updating}
+                                            onClick={() => onAssignCourier(order._id, null)}
+                                        >✕ Olib tashlash</button>
+                                    )}
+                                </div>
+                            ) : (
+                                <select
+                                    className="form-input"
+                                    disabled={updating || couriers.length === 0}
+                                    defaultValue=""
+                                    onChange={e => e.target.value && onAssignCourier(order._id, e.target.value)}
+                                    style={{ fontSize: 13 }}
+                                >
+                                    <option value="" disabled>{couriers.length === 0 ? 'Faol kurier yo\'q' : 'Kurier tanlang...'}</option>
+                                    {couriers.map(c => (
+                                        <option key={c._id} value={c._id}>
+                                            {c.name} — {c.phone} {c.carPlate && `(${c.carPlate})`}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    )}
 
                     {/* Items */}
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🍽 Taomlar</div>

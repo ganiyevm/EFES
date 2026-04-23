@@ -146,6 +146,7 @@ class PaymeService {
         try {
             const TelegramService = require('./telegram.service');
             await TelegramService.notifyOperator(order);
+            await TelegramService.notifyCustomerStatus(order, { note: "Payme orqali to'lov tasdiqlandi" });
         } catch (e) { console.error('[PAYME] Telegram error:', e.message); }
 
         return { result: { perform_time: performTime, transaction: order._id.toString(), state: 2 }, id };

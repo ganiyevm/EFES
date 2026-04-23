@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import OrdersList from './pages/orders/OrdersList';
 import ProductsList from './pages/products/ProductsList';
 import BranchesList from './pages/branches/BranchesList';
+import CouriersList from './pages/couriers/CouriersList';
 import UsersList from './pages/users/UsersList';
 import ImportPage from './pages/import/ImportPage';
 import DeliverySettings from './pages/settings/DeliverySettings';
@@ -32,6 +33,7 @@ export default function App() {
                                     <Route path="orders" element={<OrdersList />} />
                                     <Route path="products" element={<ProductsList />} />
                                     <Route path="branches" element={<BranchesList />} />
+                                    <Route path="couriers" element={<CouriersList />} />
                                     <Route path="users" element={<UsersList />} />
                                     <Route path="import" element={<ImportPage />} />
                                     <Route path="delivery" element={<DeliverySettings />} />

@@ -87,7 +87,17 @@ const orderSchema = new mongoose.Schema({
     estimatedTime: { type: Number, default: 30 }, // taxminiy yetkazib berish (daqiqa)
 
     operatorId: Number,
-    courierId: Number,
+    courierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Courier', default: null, index: true },
+
+    // Kurier botiga broadcast qilingan xabarlar (qabul qilinganda boshqalarda o'chirish uchun)
+    courierBroadcasts: [{
+        courierId: { type: mongoose.Schema.Types.ObjectId, ref: 'Courier' },
+        chatId: Number,
+        messageId: Number,         // buyurtma matni + "Qabul qilish" tugmasi
+        locationMessageId: Number, // geolokatsiya pin (ixtiyoriy)
+        _id: false,
+    }],
+
     confirmedAt: Date,
     preparingAt: Date,
     readyAt: Date,
@@ -120,5 +130,6 @@ orderSchema.pre('save', async function (next) {
 orderSchema.index({ telegramId: 1 });
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ branch: 1, status: 1 });
+orderSchema.index({ courierId: 1, deliveredAt: -1 });
 
 module.exports = mongoose.model('Order', orderSchema);
