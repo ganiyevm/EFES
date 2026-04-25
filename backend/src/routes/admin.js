@@ -65,6 +65,20 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+// ─── So'nggi buyurtmalar (Dashboard uchun) ───
+router.get('/recent-orders', async (req, res) => {
+    try {
+        const orders = await Order.find()
+            .populate('branch', 'number name')
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean();
+        res.json(orders);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Buyurtmalar (Admin) ───
 router.get('/orders', async (req, res) => {
     try {
