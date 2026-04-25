@@ -79,6 +79,76 @@ router.post('/orders/:id/payme-verify', async (req, res) => {
     }
 });
 
+// ─── Qo'lda rekonsilatsiya (Payme kabinetidan olingan tranzaksiya ID bilan) ───
+// Audit jurnali bilan saqlanadi. Faqat admin kabinetida PAID ko'rgan bo'lsa ishlatiladi.
+router.post('/orders/:id/payme-reconcile', async (req, res) => {
+    try {
+        const { paymeTransId, paymeReceiptId, payTimeMs, amountSum, note } = req.body;
+        if (!paymeTransId) return res.status(400).json({ error: 'paymeTransId kerak' });
+
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (order.paymentMethod !== 'payme') {
+            return res.status(400).json({ error: "Buyurtma Payme bilan to'lanmagan" });
+        }
+        if (order.paymentStatus === 'paid') {
+            return res.json({ alreadyPaid: true, message: "Allaqachon to'langan" });
+        }
+
+        // Summa tekshiruvi (ixtiyoriy, lekin xavfsizlik uchun)
+        if (amountSum !== undefined && Number(amountSum) !== order.total) {
+            return res.status(400).json({
+                error: `Summa mos kelmaydi: order.total=${order.total}, payme=${amountSum}`,
+            });
+        }
+
+        const now = Date.now();
+        const payTime = payTimeMs ? Number(payTimeMs) : now;
+        const wasPaid = order.paymentStatus === 'paid';
+
+        order.paymentStatus = 'paid';
+        order.paymeState = 2;
+        order.paymeTransId = order.paymeTransId || paymeTransId;
+        order.paymeCreateTime = order.paymeCreateTime || payTime;
+        order.paymePerformTime = order.paymePerformTime || payTime;
+        order.paymentId = order.paymentId || (paymeReceiptId || paymeTransId);
+        if (order.status === 'awaiting_payment') {
+            order.status = 'pending_operator';
+        }
+
+        const auditNote = `Payme kabinetidan rekonsilatsiya: txid=${paymeTransId}` +
+            (paymeReceiptId ? `, receipt=${paymeReceiptId}` : '') +
+            (req.user?.username ? ` (admin=${req.user.username})` : '') +
+            (note ? `. ${note}` : '');
+
+        order.statusHistory.push({
+            status: order.status,
+            changedBy: 'admin',
+            note: auditNote,
+        });
+        await order.save();
+
+        // Bonus + xabarlar (faqat birinchi tasdiqlashda)
+        if (!wasPaid) {
+            try {
+                const User = require('../models/User');
+                const BonusService = require('../services/bonus.service');
+                const user = await User.findById(order.user);
+                if (user) await BonusService.earnBonus(user, order);
+            } catch (e) { console.error('[RECONCILE] Bonus:', e.message); }
+            try {
+                const TelegramService = require('../services/telegram.service');
+                await TelegramService.notifyOperator(order);
+                await TelegramService.notifyCustomerStatus(order, { note: "Payme to'lovi tasdiqlandi" });
+            } catch (e) { console.error('[RECONCILE] Telegram:', e.message); }
+        }
+
+        res.json({ ok: true, synced: true, order });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── So'nggi buyurtmalar (Dashboard uchun) ───
 router.get('/recent-orders', async (req, res) => {
     try {

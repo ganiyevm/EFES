@@ -257,28 +257,56 @@ class PaymeService {
             return { ok: true, reason: 'already-paid', alreadyPaid: true };
         }
 
-        // Payme'dan order_id bo'yicha tranzaksiyalarni qidirish
-        const result = await paymeMerchantCall('receipts.find', {
+        const expectedAmount = order.total * 100; // Payme tiyinda
+
+        // 1-urinish: receipts.find (account.order_id bo'yicha)
+        const findResult = await paymeMerchantCall('receipts.find', {
             account: { order_id: order.orderNumber },
         });
 
-        if (result?.error) {
-            return { ok: false, reason: 'payme-error', payme: result.error, payme_raw: result };
+        let receipts = [];
+        if (findResult?.result?.receipts) receipts = findResult.result.receipts;
+        else if (Array.isArray(findResult?.result)) receipts = findResult.result;
+
+        // 2-urinish: receipts.get_all (sana oralig'ida) — checkout URL tranzaksiyalari uchun
+        if (receipts.length === 0) {
+            const created = order.createdAt ? new Date(order.createdAt).getTime() : Date.now();
+            const from = created - 60 * 60 * 1000;        // 1 soat oldin
+            const to   = Date.now();                       // hozir
+            const allResult = await paymeMerchantCall('receipts.get_all', {
+                count: 200,
+                from,
+                to,
+                offset: 0,
+            });
+            const allReceipts = allResult?.result?.receipts || (Array.isArray(allResult?.result) ? allResult.result : []);
+            // Bizning order_id bo'yicha filter
+            receipts = allReceipts.filter(r => {
+                const accOrderId = r?.account?.order_id || r?.detail?.account?.order_id;
+                return accOrderId === order.orderNumber;
+            });
         }
 
-        const receipts = result?.result?.receipts || (Array.isArray(result?.result) ? result.result : []);
         if (!Array.isArray(receipts) || receipts.length === 0) {
-            return { ok: false, reason: 'no-receipt', message: "Payme'da bu buyurtma uchun chek topilmadi", payme_raw: result };
+            return {
+                ok: false,
+                reason: 'no-receipt',
+                message: "Payme Merchant API'da bu buyurtma uchun tranzaksiya topilmadi. Test rejimida checkout URL orqali to'langan tranzaksiyalar Cabinet API'da ko'rinmasligi mumkin.",
+                hint: 'Payme merchant kabinetiga (https://merchant.paycom.uz) kirib, qo\'lda tekshirib ko\'ring.',
+            };
         }
 
-        // Payme receipt state'lari: 0=created, 1=waiting, 2=cancelled, 4=paid (kabinetda PAID)
-        // Sumamiz mos kelishi va PAID statusi shart.
-        const expectedAmount = order.total * 100; // Payme tiyinda
+        // Payme receipt state'lari: 0=created, 1=waiting, 2=cancelled, 4=paid (PAID)
         const paidReceipt = receipts.find(r => r.state === 4 && r.amount === expectedAmount);
 
         if (!paidReceipt) {
             const summary = receipts.map(r => ({ _id: r._id, state: r.state, amount: r.amount }));
-            return { ok: false, reason: 'not-paid-on-payme', message: "Payme'da to'lov tasdiqlanmagan", receipts: summary };
+            return {
+                ok: false,
+                reason: 'not-paid-on-payme',
+                message: "Payme'da bu tranzaksiya uchun PAID holati tasdiqlanmagan.",
+                receipts: summary,
+            };
         }
 
         // Payme tasdiqladi — DB sinxronlash

@@ -248,7 +248,7 @@ function mapsLink(lat, lng) {
 
 function PaymeVerifyButton({ order, onSuccess }) {
     const [busy, setBusy] = useState(false);
-    const handleClick = async () => {
+    const handleAutoVerify = async () => {
         if (busy) return;
         setBusy(true);
         try {
@@ -256,28 +256,74 @@ function PaymeVerifyButton({ order, onSuccess }) {
             if (r.data?.ok && r.data?.synced) {
                 alert(`✅ Payme tasdiqladi — buyurtma "to'langan" deb belgilandi.`);
                 onSuccess && onSuccess();
-            } else if (r.data?.alreadyPaid) {
+                return;
+            }
+            if (r.data?.alreadyPaid) {
                 alert("✅ Bu buyurtma allaqachon to'langan.");
                 onSuccess && onSuccess();
-            } else {
-                const reasons = {
-                    'no-receipt': "Payme'da bu buyurtma uchun chek topilmadi.",
-                    'not-paid-on-payme': "Payme'da to'lov hali tasdiqlanmagan.",
-                    'payme-error': `Payme bilan bog'lanishda xato: ${r.data?.payme || ''}`,
-                    'not-payme': "Buyurtma Payme bilan to'lanmagan.",
-                };
-                alert(`⚠️ ${reasons[r.data?.reason] || r.data?.message || "Tekshirib bo'lmadi"}`);
+                return;
             }
+            // Avtomatik topilmadi → qo'lda rekonsilatsiya taklifi
+            if (r.data?.reason === 'no-receipt') {
+                const wantManual = confirm(
+                    "Payme Merchant API'da chek avtomatik topilmadi.\n\n" +
+                    "Agar siz Payme kabinetida (merchant.payme.uz) shu buyurtma " +
+                    "uchun PAID tranzaksiyani ko'rgan bo'lsangiz, qo'lda rekonsilatsiya " +
+                    "qilish mumkin (audit jurnali bilan).\n\n" +
+                    "Davom etamizmi?"
+                );
+                if (wantManual) await runManualReconcile();
+                return;
+            }
+            const reasons = {
+                'not-paid-on-payme': "Payme'da to'lov hali tasdiqlanmagan.",
+                'payme-error': `Payme bilan bog'lanishda xato: ${r.data?.payme || ''}`,
+                'not-payme': "Buyurtma Payme bilan to'lanmagan.",
+            };
+            alert(`⚠️ ${reasons[r.data?.reason] || r.data?.message || "Tekshirib bo'lmadi"}`);
         } catch (err) {
             alert(`Xato: ${err.response?.data?.error || err.message}`);
         } finally {
             setBusy(false);
         }
     };
+
+    const runManualReconcile = async () => {
+        const txid = prompt(
+            "Payme tranzaksiya ID (ID платёжа, masalan 69ec54d9ce4c0cdaac3ff05f):"
+        );
+        if (!txid?.trim()) return;
+        const receiptId = prompt(
+            "Chek ID (Номер чека, ixtiyoriy — bo'sh qoldirsangiz ham bo'ladi):"
+        ) || '';
+        const note = prompt(
+            "Izoh (ixtiyoriy, masalan: 'Payme kabinetida 25.04.2026 da PAID'):"
+        ) || '';
+        try {
+            const r = await api.post(`/admin/orders/${order._id}/payme-reconcile`, {
+                paymeTransId: txid.trim(),
+                paymeReceiptId: receiptId.trim(),
+                amountSum: order.total,
+                note: note.trim(),
+            });
+            if (r.data?.ok && r.data?.synced) {
+                alert(`✅ Rekonsilatsiya muvaffaqiyatli — buyurtma "to'langan" deb belgilandi.\nAudit jurnali yangilandi.`);
+                onSuccess && onSuccess();
+            } else if (r.data?.alreadyPaid) {
+                alert("Allaqachon to'langan.");
+                onSuccess && onSuccess();
+            } else {
+                alert(`Xato: ${r.data?.error || 'noma\'lum'}`);
+            }
+        } catch (err) {
+            alert(`Xato: ${err.response?.data?.error || err.message}`);
+        }
+    };
+
     return (
         <button
             className="btn btn-outline btn-sm"
-            onClick={handleClick}
+            onClick={handleAutoVerify}
             disabled={busy}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
