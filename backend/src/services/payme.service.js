@@ -1,9 +1,48 @@
+const https = require('https');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const BonusService = require('./bonus.service');
 
 // Payme transaction timeout — 12 soat (ms)
 const TRANSACTION_TIMEOUT = 12 * 60 * 60 * 1000;
+
+function paymeMerchantApiHost() {
+    return process.env.PAYME_TEST_MODE === 'true'
+        ? 'checkout.test.paycom.uz'
+        : 'checkout.paycom.uz';
+}
+
+// Payme Merchant API JSON-RPC chaqiruvchi (X-Auth bilan)
+function paymeMerchantCall(method, params) {
+    return new Promise((resolve) => {
+        const merchantId = process.env.PAYME_MERCHANT_ID;
+        const key = process.env.PAYME_MERCHANT_KEY || process.env.PAYME_SECRET_KEY;
+        if (!merchantId || !key) return resolve({ error: 'no-credentials' });
+
+        const body = JSON.stringify({ id: Date.now(), method, params });
+        const req = https.request({
+            hostname: paymeMerchantApiHost(),
+            path: '/api',
+            method: 'POST',
+            headers: {
+                'X-Auth': `${merchantId}:${key}`,
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body),
+            },
+        }, (res) => {
+            let data = '';
+            res.on('data', c => { data += c; });
+            res.on('end', () => {
+                try { resolve(JSON.parse(data)); }
+                catch { resolve({ error: 'invalid-json', raw: data }); }
+            });
+        });
+        req.on('error', (err) => resolve({ error: err.message }));
+        req.setTimeout(8000, () => { req.destroy(); resolve({ error: 'timeout' }); });
+        req.write(body);
+        req.end();
+    });
+}
 
 class PaymeService {
     // ─── Basic Auth tekshirish ───
@@ -205,6 +244,80 @@ class PaymeService {
                 reason: order.paymeReason ?? null,
             },
             id,
+        };
+    }
+
+    // ─── Payme Merchant API: tranzaksiyaning haqiqiy holatini Payme'dan so'rash ───
+    // Faqat Payme tasdiqlasa DB sinxronlanadi (kassada kamomatdan saqlash uchun).
+    static async verifyByOrder(order) {
+        if (order.paymentMethod !== 'payme') {
+            return { ok: false, reason: 'not-payme', message: 'Buyurtma Payme bilan to\'lanmagan' };
+        }
+        if (order.paymentStatus === 'paid') {
+            return { ok: true, reason: 'already-paid', alreadyPaid: true };
+        }
+
+        // Payme'dan order_id bo'yicha tranzaksiyalarni qidirish
+        const result = await paymeMerchantCall('receipts.find', {
+            account: { order_id: order.orderNumber },
+        });
+
+        if (result?.error) {
+            return { ok: false, reason: 'payme-error', payme: result.error, payme_raw: result };
+        }
+
+        const receipts = result?.result?.receipts || (Array.isArray(result?.result) ? result.result : []);
+        if (!Array.isArray(receipts) || receipts.length === 0) {
+            return { ok: false, reason: 'no-receipt', message: "Payme'da bu buyurtma uchun chek topilmadi", payme_raw: result };
+        }
+
+        // Payme receipt state'lari: 0=created, 1=waiting, 2=cancelled, 4=paid (kabinetda PAID)
+        // Sumamiz mos kelishi va PAID statusi shart.
+        const expectedAmount = order.total * 100; // Payme tiyinda
+        const paidReceipt = receipts.find(r => r.state === 4 && r.amount === expectedAmount);
+
+        if (!paidReceipt) {
+            const summary = receipts.map(r => ({ _id: r._id, state: r.state, amount: r.amount }));
+            return { ok: false, reason: 'not-paid-on-payme', message: "Payme'da to'lov tasdiqlanmagan", receipts: summary };
+        }
+
+        // Payme tasdiqladi — DB sinxronlash
+        const wasPaid = order.paymentStatus === 'paid';
+        order.paymentStatus = 'paid';
+        order.paymeState = 2;
+        order.paymeTransId = order.paymeTransId || paidReceipt._id;
+        order.paymePerformTime = order.paymePerformTime || (paidReceipt.pay_time || Date.now());
+        order.paymeCreateTime = order.paymeCreateTime || (paidReceipt.create_time || Date.now());
+        order.paymentId = order.paymentId || paidReceipt._id;
+        if (order.status === 'awaiting_payment') {
+            order.status = 'pending_operator';
+            order.statusHistory.push({
+                status: 'pending_operator',
+                changedBy: 'system',
+                note: "Payme Merchant API orqali to'lov tasdiqlandi (verify)",
+            });
+        }
+        await order.save();
+
+        // Bonus + xabarlar (faqat birinchi tasdiqlashda)
+        if (!wasPaid) {
+            try {
+                const user = await User.findById(order.user);
+                if (user) await BonusService.earnBonus(user, order);
+            } catch (e) { console.error('[PAYME VERIFY] Bonus error:', e.message); }
+            try {
+                const TelegramService = require('./telegram.service');
+                await TelegramService.notifyOperator(order);
+                await TelegramService.notifyCustomerStatus(order, { note: "Payme to'lovi tasdiqlandi" });
+            } catch (e) { console.error('[PAYME VERIFY] Telegram error:', e.message); }
+        }
+
+        return {
+            ok: true,
+            synced: true,
+            paymeReceiptId: paidReceipt._id,
+            amount: paidReceipt.amount,
+            payTime: paidReceipt.pay_time,
         };
     }
 

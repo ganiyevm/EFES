@@ -65,6 +65,20 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+// ─── Payme to'lovini Payme Merchant API orqali tasdiqlash ───
+router.post('/orders/:id/payme-verify', async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+
+        const PaymeService = require('../services/payme.service');
+        const result = await PaymeService.verifyByOrder(order);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── So'nggi buyurtmalar (Dashboard uchun) ───
 router.get('/recent-orders', async (req, res) => {
     try {

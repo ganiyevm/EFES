@@ -232,6 +232,7 @@ export default function OrdersList() {
                     onClose={() => setSelected(null)}
                     onStatusChange={handleStatusChange}
                     onAssignCourier={handleAssignCourier}
+                    onUpdate={() => { fetchOrders(); setSelected(null); }}
                     couriers={couriers}
                     updating={updating}
                 />
@@ -245,7 +246,47 @@ function mapsLink(lat, lng) {
     return `https://yandex.com/maps/?pt=${lng},${lat}&z=17&l=map`;
 }
 
-function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, couriers, updating }) {
+function PaymeVerifyButton({ order, onSuccess }) {
+    const [busy, setBusy] = useState(false);
+    const handleClick = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+            const r = await api.post(`/admin/orders/${order._id}/payme-verify`);
+            if (r.data?.ok && r.data?.synced) {
+                alert(`✅ Payme tasdiqladi — buyurtma "to'langan" deb belgilandi.`);
+                onSuccess && onSuccess();
+            } else if (r.data?.alreadyPaid) {
+                alert("✅ Bu buyurtma allaqachon to'langan.");
+                onSuccess && onSuccess();
+            } else {
+                const reasons = {
+                    'no-receipt': "Payme'da bu buyurtma uchun chek topilmadi.",
+                    'not-paid-on-payme': "Payme'da to'lov hali tasdiqlanmagan.",
+                    'payme-error': `Payme bilan bog'lanishda xato: ${r.data?.payme || ''}`,
+                    'not-payme': "Buyurtma Payme bilan to'lanmagan.",
+                };
+                alert(`⚠️ ${reasons[r.data?.reason] || r.data?.message || "Tekshirib bo'lmadi"}`);
+            }
+        } catch (err) {
+            alert(`Xato: ${err.response?.data?.error || err.message}`);
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <button
+            className="btn btn-outline btn-sm"
+            onClick={handleClick}
+            disabled={busy}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+        >
+            {busy ? '⏳' : '🔄'} Payme'dan tekshirish
+        </button>
+    );
+}
+
+function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, onUpdate, couriers, updating }) {
     const [note, setNote] = useState('');
 
     return (
@@ -256,7 +297,7 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, cou
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
                 </div>
                 <div className="modal-body">
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
                         <span className={`badge ${STATUS_BADGE_MAP[order.status]}`}>{STATUS_ICONS[order.status]} {STATUS_LABELS[order.status]}</span>
                         <span className="badge badge-gray">
                             <PaymentBadge method={order.paymentMethod} size={18} />
@@ -264,6 +305,9 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, cou
                         <span className={`badge ${order.paymentStatus === 'paid' ? 'badge-success' : 'badge-warning'}`}>
                             {order.paymentStatus === 'paid' ? '✅ To\'langan' : "⏳ To'lanmagan"}
                         </span>
+                        {order.paymentMethod === 'payme' && order.paymentStatus !== 'paid' && (
+                            <PaymeVerifyButton order={order} onSuccess={onUpdate} />
+                        )}
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
