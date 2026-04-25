@@ -12,7 +12,8 @@ class PaymeService {
         if (!authHeader.startsWith('Basic ')) return false;
         const decoded = Buffer.from(authHeader.replace('Basic ', ''), 'base64').toString();
         const [, key] = decoded.split(':');
-        return key === process.env.PAYME_MERCHANT_KEY;
+        const expected = process.env.PAYME_MERCHANT_KEY || process.env.PAYME_SECRET_KEY;
+        return !!expected && key === expected;
     }
 
     // ─── JSON-RPC handler ───
