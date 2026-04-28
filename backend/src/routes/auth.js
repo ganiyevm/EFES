@@ -101,7 +101,7 @@ router.post('/send-otp', async (req, res) => {
         user.otpExpiry = expiry;
         await user.save();
 
-        if (process.env.SMS_TOKEN) {
+        if (process.env.SMS_EMAIL && process.env.SMS_PASSWORD) {
             // Eskiz SMS orqali yuborish
             const EskizService = require('../services/eskiz.service');
             await EskizService.sendOtp(normalizedPhone, code);
