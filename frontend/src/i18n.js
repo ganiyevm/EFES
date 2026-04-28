@@ -137,6 +137,22 @@ const translations = {
         phone: 'Telefon', editProfile: 'Profilni tahrirlash',
         logout: 'Chiqish',
 
+        // ── Phone OTP ──────────────────────────────────────────────────────
+        verifyPhone: 'Telefon raqamni tasdiqlang',
+        verifyPhoneDesc: 'Tez yetkazib berish uchun raqamingizni Telegram orqali tasdiqlang.',
+        phonePlaceholder: '+998 90 123 45 67',
+        sendCodeTelegram: 'Telegram orqali kod yuborish',
+        sendingCode: 'Yuborilmoqda...',
+        codeSentDesc: 'Kod Telegram botga yuborildi. Ochib, kodni kiriting:',
+        otpPlaceholder: '6 xonali kod',
+        verifyCode: 'Tasdiqlash',
+        verifying: 'Tekshirilmoqda...',
+        resendCode: 'Qayta yuborish',
+        phoneVerified: 'Telefon tasdiqlandi',
+        phoneVerifiedDesc: 'Raqamingiz muvaffaqiyatli tasdiqlandi!',
+        otpError: "Kod noto'g'ri yoki muddati tugagan",
+        openBot: 'Botni ochish',
+
         // ── Promotions ─────────────────────────────────────────────────────
         promos: 'Aksiyalar', promoCode: 'Promo kod',
         promoCodePlaceholder: 'Masalan: EFES10',
@@ -291,6 +307,22 @@ const translations = {
         phone: 'Телефон', editProfile: 'Редактировать профиль',
         logout: 'Выйти',
 
+        // ── Phone OTP ──────────────────────────────────────────────────────
+        verifyPhone: 'Подтвердите номер телефона',
+        verifyPhoneDesc: 'Для быстрой доставки подтвердите номер через Telegram.',
+        phonePlaceholder: '+998 90 123 45 67',
+        sendCodeTelegram: 'Отправить код через Telegram',
+        sendingCode: 'Отправляем...',
+        codeSentDesc: 'Код отправлен в Telegram бот. Откройте его и введите код:',
+        otpPlaceholder: '6-значный код',
+        verifyCode: 'Подтвердить',
+        verifying: 'Проверяем...',
+        resendCode: 'Отправить снова',
+        phoneVerified: 'Телефон подтверждён',
+        phoneVerifiedDesc: 'Ваш номер успешно подтверждён!',
+        otpError: 'Неверный код или истёк срок действия',
+        openBot: 'Открыть бот',
+
         // ── Promotions ─────────────────────────────────────────────────────
         promos: 'Акции', promoCode: 'Промокод',
         promoCodePlaceholder: 'Например: EFES10',
@@ -444,6 +476,22 @@ const translations = {
         pointsToNext: '{n} points to {tier}',
         phone: 'Phone', editProfile: 'Edit profile',
         logout: 'Logout',
+
+        // ── Phone OTP ──────────────────────────────────────────────────────
+        verifyPhone: 'Verify Phone Number',
+        verifyPhoneDesc: 'Verify your number via Telegram for faster delivery.',
+        phonePlaceholder: '+998 90 123 45 67',
+        sendCodeTelegram: 'Send Code via Telegram',
+        sendingCode: 'Sending...',
+        codeSentDesc: 'Code sent to Telegram bot. Open it and enter the code:',
+        otpPlaceholder: '6-digit code',
+        verifyCode: 'Verify',
+        verifying: 'Verifying...',
+        resendCode: 'Resend code',
+        phoneVerified: 'Phone Verified',
+        phoneVerifiedDesc: 'Your number has been successfully verified!',
+        otpError: 'Incorrect code or expired',
+        openBot: 'Open Bot',
 
         // ── Promotions ─────────────────────────────────────────────────────
         promos: 'Promotions', promoCode: 'Promo code',

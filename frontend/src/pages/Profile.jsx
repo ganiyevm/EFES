@@ -128,6 +128,13 @@ export default function Profile() {
                 </div>
             </div>
 
+            {/* ── Phone Verification Banner ── */}
+            {!user.isProfileComplete && (
+                <div style={{ padding: '12px 16px 0' }}>
+                    <PhoneVerificationCard t={t} user={user} setUser={setUser} />
+                </div>
+            )}
+
             {/* ── Menu Items ── */}
             <div style={{ padding: '14px 16px' }}>
                 <MenuItem icon="📋" label={t('myOrders')} onPress={() => navigate('/orders')} />
@@ -358,3 +365,221 @@ const iStyle = {
     borderRadius: 12, color: 'var(--text)', fontSize: 14,
     outline: 'none', fontFamily: 'inherit', transition: 'all 0.25s',
 };
+
+// ── Phone Verification via Telegram OTP ─────────────────────────────────
+function PhoneVerificationCard({ t, user, setUser }) {
+    const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'efes_kebab_bot';
+
+    const [step, setStep] = useState('phone');   // 'phone' | 'otp' | 'done'
+    const [phone, setPhone] = useState(user?.phone || '');
+    const [code, setCode] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [cooldown, setCooldown] = useState(0);
+
+    // Qayta yuborish taymeri
+    useEffect(() => {
+        if (cooldown <= 0) return;
+        const timer = setInterval(() => setCooldown(c => c - 1), 1000);
+        return () => clearInterval(timer);
+    }, [cooldown]);
+
+    const handleSend = async () => {
+        if (!phone.trim()) return;
+        setError('');
+        setLoading(true);
+        try {
+            await api.post('/auth/send-otp', { phone: phone.trim() });
+            setStep('otp');
+            setCooldown(60);
+        } catch (e) {
+            setError(e.response?.data?.error || t('otpError'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerify = async () => {
+        if (!code.trim()) return;
+        setError('');
+        setLoading(true);
+        try {
+            const { data } = await api.post('/auth/verify-otp', { phone: phone.trim(), code: code.trim() });
+            if (data.token) localStorage.setItem('efes_token', data.token);
+            setUser(data.user);
+            setStep('done');
+        } catch (e) {
+            setError(e.response?.data?.error || t('otpError'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResend = async () => {
+        if (cooldown > 0) return;
+        setError('');
+        setCode('');
+        setLoading(true);
+        try {
+            await api.post('/auth/send-otp', { phone: phone.trim() });
+            setCooldown(60);
+        } catch (e) {
+            setError(e.response?.data?.error || t('otpError'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (step === 'done') {
+        return (
+            <div style={{
+                background: 'linear-gradient(135deg, rgba(46,204,113,0.12), rgba(46,204,113,0.06))',
+                border: '1px solid rgba(46,204,113,0.25)',
+                borderRadius: 18, padding: '18px 20px',
+                display: 'flex', alignItems: 'center', gap: 14, marginBottom: 4,
+            }}>
+                <div style={{
+                    width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+                    background: 'rgba(46,204,113,0.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+                }}>✅</div>
+                <div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{t('phoneVerified')}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{t('phoneVerifiedDesc')}</div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{
+            background: 'linear-gradient(135deg, rgba(212,160,23,0.08), rgba(212,160,23,0.03))',
+            border: '1px solid rgba(212,160,23,0.2)',
+            borderRadius: 18, padding: '18px 20px', marginBottom: 4,
+        }}>
+            {/* Sarlavha */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                <div style={{
+                    width: 42, height: 42, borderRadius: 13, flexShrink: 0,
+                    background: 'rgba(212,160,23,0.12)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+                }}>📱</div>
+                <div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{t('verifyPhone')}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{t('verifyPhoneDesc')}</div>
+                </div>
+            </div>
+
+            {/* 1-qadam: telefon */}
+            {step === 'phone' && (
+                <>
+                    <input
+                        type="tel"
+                        value={phone}
+                        onChange={e => { setPhone(e.target.value); setError(''); }}
+                        placeholder={t('phonePlaceholder')}
+                        style={{ ...iStyle, marginBottom: 10 }}
+                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                    />
+                    {error && <div style={{ color: '#e74c3c', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+                    <button
+                        onClick={handleSend}
+                        disabled={loading || !phone.trim()}
+                        style={{
+                            width: '100%', padding: '13px',
+                            background: loading || !phone.trim()
+                                ? 'var(--bg-secondary)'
+                                : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                            border: 'none', borderRadius: 13,
+                            color: loading || !phone.trim() ? 'var(--text-secondary)' : '#1a1a24',
+                            fontSize: 14, fontWeight: 700, cursor: loading ? 'wait' : 'pointer',
+                            fontFamily: 'inherit', transition: 'all 0.25s',
+                            boxShadow: !loading && phone.trim() ? '0 2px 12px rgba(212,160,23,0.25)' : 'none',
+                        }}
+                    >
+                        {loading ? t('sendingCode') : t('sendCodeTelegram')}
+                    </button>
+                </>
+            )}
+
+            {/* 2-qadam: OTP */}
+            {step === 'otp' && (
+                <>
+                    <div style={{
+                        fontSize: 13, color: 'var(--text-secondary)',
+                        marginBottom: 12, lineHeight: 1.5,
+                    }}>
+                        {t('codeSentDesc')}
+                    </div>
+
+                    {/* Telegram botni ochish tugmasi */}
+                    <a
+                        href={`https://t.me/${BOT_USERNAME}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            padding: '11px', marginBottom: 12,
+                            background: 'rgba(0,136,204,0.1)', border: '1px solid rgba(0,136,204,0.2)',
+                            borderRadius: 12, color: '#0088cc', fontSize: 13, fontWeight: 700,
+                            textDecoration: 'none',
+                        }}
+                    >
+                        <span style={{ fontSize: 18 }}>✈️</span> {t('openBot')}
+                    </a>
+
+                    <input
+                        type="number"
+                        inputMode="numeric"
+                        value={code}
+                        onChange={e => { setCode(e.target.value.slice(0, 6)); setError(''); }}
+                        placeholder={t('otpPlaceholder')}
+                        style={{ ...iStyle, marginBottom: 10, letterSpacing: 6, fontSize: 20, textAlign: 'center' }}
+                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                    />
+                    {error && <div style={{ color: '#e74c3c', fontSize: 12, marginBottom: 8 }}>{error}</div>}
+
+                    <button
+                        onClick={handleVerify}
+                        disabled={loading || code.length < 6}
+                        style={{
+                            width: '100%', padding: '13px', marginBottom: 10,
+                            background: loading || code.length < 6
+                                ? 'var(--bg-secondary)'
+                                : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                            border: 'none', borderRadius: 13,
+                            color: loading || code.length < 6 ? 'var(--text-secondary)' : '#1a1a24',
+                            fontSize: 14, fontWeight: 700, cursor: loading ? 'wait' : 'pointer',
+                            fontFamily: 'inherit', transition: 'all 0.25s',
+                            boxShadow: !loading && code.length >= 6 ? '0 2px 12px rgba(212,160,23,0.25)' : 'none',
+                        }}
+                    >
+                        {loading ? t('verifying') : t('verifyCode')}
+                    </button>
+
+                    {/* Qayta yuborish */}
+                    <div style={{ textAlign: 'center' }}>
+                        <button
+                            onClick={cooldown > 0 ? undefined : handleResend}
+                            disabled={cooldown > 0 || loading}
+                            style={{
+                                background: 'none', border: 'none', padding: '4px 8px',
+                                fontSize: 13, cursor: cooldown > 0 ? 'default' : 'pointer',
+                                color: cooldown > 0 ? 'var(--text-secondary)' : 'var(--primary-light)',
+                                fontFamily: 'inherit', fontWeight: 600,
+                            }}
+                        >
+                            {cooldown > 0 ? `${t('resendCode')} (${cooldown}s)` : t('resendCode')}
+                        </button>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: 12, marginLeft: 8, cursor: 'pointer' }}
+                            onClick={() => { setStep('phone'); setCode(''); setError(''); }}>
+                            ← {t('back')}
+                        </span>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
