@@ -310,6 +310,38 @@ router.get('/users', async (req, res) => {
     }
 });
 
+// ─── Foydalanuvchini bloklash / ochish ───
+router.patch('/users/:id/block', async (req, res) => {
+    try {
+        const { isBlocked } = req.body;
+        const user = await User.findByIdAndUpdate(req.params.id, { isBlocked }, { new: true });
+        if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Foydalanuvchini o'chirish ───
+router.delete('/users/:id', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+        const Order = require('../models/Order');
+        const activeOrders = await Order.countDocuments({
+            user: user._id,
+            status: { $in: ['pending_operator', 'confirmed', 'preparing', 'ready', 'on_the_way'] },
+        });
+        if (activeOrders > 0) {
+            return res.status(400).json({ error: `Foydalanuvchida ${activeOrders} ta aktiv buyurtma bor. Avval yakunlang.` });
+        }
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── Admin hisoblar ───
 router.get('/accounts', async (req, res) => {
     try {

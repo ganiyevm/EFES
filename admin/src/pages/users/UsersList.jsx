@@ -28,6 +28,17 @@ export default function UsersList() {
         } catch { }
     };
 
+    const handleDelete = async (user) => {
+        const label = `${user.firstName} ${user.lastName}`.trim() || user.phone || 'Foydalanuvchi';
+        if (!window.confirm(`"${label}" ni o'chirishni tasdiqlaysizmi?\n\nBu amalni ortga qaytarib bo'lmaydi.`)) return;
+        try {
+            await api.delete(`/admin/users/${user._id}`);
+            fetchUsers();
+        } catch (e) {
+            alert(e.response?.data?.error || "O'chirib bo'lmadi");
+        }
+    };
+
     const TIER_COLORS = { bronze: '#cd7f32', silver: '#aaa', gold: '#f39c12' };
     const TIER_LABELS = { bronze: '🥉 Bronza', silver: '🥈 Kumush', gold: '🥇 Oltin' };
     const pages = Math.ceil(total / limit);
@@ -91,13 +102,23 @@ export default function UsersList() {
                                         <td><span style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 6 }}>{u.language || 'uz'}</span></td>
                                         <td style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(u.registeredAt).toLocaleDateString()}</td>
                                         <td>
-                                            <button
-                                                className="btn btn-sm"
-                                                style={{ background: u.isBlocked ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.08)', color: u.isBlocked ? 'var(--success)' : 'var(--danger)', border: `1px solid ${u.isBlocked ? 'rgba(46,204,113,0.2)' : 'rgba(231,76,60,0.15)'}` }}
-                                                onClick={() => handleBlock(u)}
-                                            >
-                                                {u.isBlocked ? '✅ Ochish' : '🚫 Bloklash'}
-                                            </button>
+                                            <div style={{ display: 'flex', gap: 6 }}>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ background: u.isBlocked ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.08)', color: u.isBlocked ? 'var(--success)' : 'var(--danger)', border: `1px solid ${u.isBlocked ? 'rgba(46,204,113,0.2)' : 'rgba(231,76,60,0.15)'}` }}
+                                                    onClick={() => handleBlock(u)}
+                                                >
+                                                    {u.isBlocked ? '✅ Ochish' : '🚫 Bloklash'}
+                                                </button>
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
+                                                    onClick={() => handleDelete(u)}
+                                                    title="O'chirish"
+                                                >
+                                                    🗑
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
