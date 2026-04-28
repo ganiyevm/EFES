@@ -101,22 +101,28 @@ router.post('/send-otp', async (req, res) => {
         user.otpExpiry = expiry;
         await user.save();
 
-        // Telegram bot orqali yuborish
-        const TelegramService = require('../services/telegram.service');
-        const text =
-            `🔐 <b>EFES Delivery — Tasdiqlash kodi</b>\n\n` +
-            `Telefon raqam: <b>${normalizedPhone}</b>\n\n` +
-            `Kod: <b>${code}</b>\n\n` +
-            `⏱ Kod 5 daqiqa davomida amal qiladi.\n` +
-            `Agar siz bu so'rovni yubormagan bo'lsangiz, e'tibor bermang.`;
+        if (process.env.SMS_TOKEN) {
+            // Eskiz SMS orqali yuborish
+            const EskizService = require('../services/eskiz.service');
+            await EskizService.sendOtp(normalizedPhone, code);
+            res.json({ success: true, via: 'sms', message: "Kod SMS orqali yuborildi" });
+        } else {
+            // Fallback: Telegram bot orqali yuborish
+            const TelegramService = require('../services/telegram.service');
+            const text =
+                `🔐 <b>EFES Delivery — Tasdiqlash kodi</b>\n\n` +
+                `Telefon raqam: <b>${normalizedPhone}</b>\n\n` +
+                `Kod: <b>${code}</b>\n\n` +
+                `⏱ Kod 5 daqiqa davomida amal qiladi.\n` +
+                `Agar siz bu so'rovni yubormagan bo'lsangiz, e'tibor bermang.`;
 
-        const result = await TelegramService.sendMessage(user.telegramId, text);
-        if (!result?.ok) {
-            console.error('OTP Telegram xatosi:', result);
-            return res.status(500).json({ error: 'Telegram orqali yuborib bo\'lmadi. Bot bilan suhbatni boshlang.' });
+            const result = await TelegramService.sendMessage(user.telegramId, text);
+            if (!result?.ok) {
+                console.error('OTP Telegram xatosi:', result);
+                return res.status(500).json({ error: "Telegram orqali yuborib bo'lmadi. Bot bilan suhbatni boshlang." });
+            }
+            res.json({ success: true, via: 'telegram', message: "Kod Telegram botga yuborildi" });
         }
-
-        res.json({ success: true, message: "Kod Telegram botga yuborildi" });
     } catch (err) {
         if (err.name === 'JsonWebTokenError') return res.status(401).json({ error: 'Yaroqsiz token' });
         console.error('OTP send error:', err);

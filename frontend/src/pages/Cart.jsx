@@ -614,6 +614,7 @@ function PhoneAuthModal({ onClose, onVerified }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [cooldown, setCooldown] = useState(0);
+    const [via, setVia] = useState(''); // 'sms' | 'telegram'
 
     useEffect(() => {
         if (cooldown <= 0) return;
@@ -634,7 +635,8 @@ function PhoneAuthModal({ onClose, onVerified }) {
         setError('');
         setLoading(true);
         try {
-            await api.post('/auth/send-otp', { phone });
+            const { data } = await api.post('/auth/send-otp', { phone });
+            setVia(data.via || 'telegram');
             setStep('otp');
             setCooldown(60);
         } catch (e) {
@@ -664,7 +666,8 @@ function PhoneAuthModal({ onClose, onVerified }) {
         if (cooldown > 0) return;
         setError(''); setCode(''); setLoading(true);
         try {
-            await api.post('/auth/send-otp', { phone });
+            const { data } = await api.post('/auth/send-otp', { phone });
+            setVia(data.via || via);
             setCooldown(60);
         } catch (e) {
             setError(e.response?.data?.error || 'Xato');
@@ -731,20 +734,8 @@ function PhoneAuthModal({ onClose, onVerified }) {
                         {error && <div style={{ color: '#e74c3c', fontSize: 12, marginBottom: 8 }}>{error}</div>}
 
                         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
-                            Kod <b>@{BOT_USERNAME}</b> Telegram botiga yuboriladi.
-                            Avval botni ochib qo'ying.
+                            Tasdiqlash kodi SMS orqali yuboriladi.
                         </div>
-
-                        <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            padding: '11px 14px', marginBottom: 14,
-                            background: 'rgba(0,136,204,0.08)', border: '1px solid rgba(0,136,204,0.18)',
-                            borderRadius: 13, color: '#0088cc', fontSize: 13,
-                            fontWeight: 600, textDecoration: 'none',
-                        }}>
-                            <span style={{ fontSize: 18 }}>✈️</span>
-                            <span>Botni ochish: <b>@{BOT_USERNAME}</b></span>
-                        </a>
 
                         <button
                             onClick={handleSend}
@@ -769,23 +760,32 @@ function PhoneAuthModal({ onClose, onVerified }) {
                 {step === 'otp' && (
                     <>
                         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                            <div style={{ fontSize: 40, marginBottom: 10 }}>✈️</div>
+                            <div style={{ fontSize: 40, marginBottom: 10 }}>{via === 'sms' ? '📱' : '✈️'}</div>
                             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Kod yuborildi</div>
-                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                <b>@{BOT_USERNAME}</b> botini oching va<br />
-                                u yerdan 6 xonali kodni kiriting
-                            </div>
+                            {via === 'sms' ? (
+                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                    <b>{phone}</b> raqamiga SMS keldi.<br />
+                                    6 xonali kodni kiriting.
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                    <b>@{BOT_USERNAME}</b> botini oching va<br />
+                                    u yerdan 6 xonali kodni kiriting
+                                </div>
+                            )}
                         </div>
 
-                        <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            padding: '12px', marginBottom: 14,
-                            background: 'rgba(0,136,204,0.1)', border: '1px solid rgba(0,136,204,0.2)',
-                            borderRadius: 13, color: '#0088cc', fontSize: 14,
-                            fontWeight: 700, textDecoration: 'none',
-                        }}>
-                            ✈️ Botni ochish
-                        </a>
+                        {via !== 'sms' && (
+                            <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                padding: '12px', marginBottom: 14,
+                                background: 'rgba(0,136,204,0.1)', border: '1px solid rgba(0,136,204,0.2)',
+                                borderRadius: 13, color: '#0088cc', fontSize: 14,
+                                fontWeight: 700, textDecoration: 'none',
+                            }}>
+                                ✈️ Botni ochish
+                            </a>
+                        )}
 
                         <input
                             type="number"
