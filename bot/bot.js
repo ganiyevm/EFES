@@ -13,12 +13,12 @@ mongoose.connect(MONGODB_URI)
     .then(() => console.log('🤖 Bot: MongoDB ulandi'))
     .catch(e => console.error('🤖 Bot: MongoDB xato:', e.message));
 
-const User = require('../backend/src/models/User');
-const Order = require('../backend/src/models/Order');
-const Branch = require('../backend/src/models/Branch');
-const OrderStatusService = require('../backend/src/services/orderStatus.service');
-const CourierBotService = require('../backend/src/services/courierBot.service');
-const TelegramService = require('../backend/src/services/telegram.service');
+const User = require('./src/models/User');
+const Order = require('./src/models/Order');
+const Branch = require('./src/models/Branch');
+const OrderStatusService = require('./src/services/orderStatus.service');
+const CourierBotService = require('./src/services/courierBot.service');
+const TelegramService = require('./src/services/telegram.service');
 
 const api = axios.create({ baseURL: `https://api.telegram.org/bot${TOKEN}` });
 

@@ -20,11 +20,11 @@ COPY backend/package*.json ./backend/
 RUN cd backend && npm ci --omit=dev
 
 COPY backend/ ./backend/
-COPY bot/ ./bot/
+COPY bot/bot.js ./backend/bot.js
 COPY --from=admin-build     /app/admin/dist    ./admin/dist
 COPY --from=frontend-build  /app/frontend/dist ./frontend/dist
 
 EXPOSE 3000
 EXPOSE 3001
 
-CMD ["sh", "-c", "node bot/bot.js & node backend/server.js"]
+CMD ["sh", "-c", "node backend/bot.js & node backend/server.js"]
