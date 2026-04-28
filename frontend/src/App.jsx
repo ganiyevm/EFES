@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import LangSelect from './components/LangSelect';
 import DeliveryTypeModal from './components/DeliveryTypeModal';
@@ -14,46 +14,64 @@ import Profile from './pages/Profile';
 import Orders from './pages/Orders';
 import Onboarding from './pages/Onboarding';
 
-export default function App() {
+// AuthContext ga kirish uchun alohida inner komponent
+function AppInner() {
+    const { user, loading } = useAuth();
     const [langChosen, setLangChosen] = useState(!!localStorage.getItem('efes_lang'));
     const [deliveryChosen, setDeliveryChosen] = useState(!!localStorage.getItem('efes_delivery_type'));
 
     // 1-qadam: Til tanlash
     if (!langChosen) {
-        return (
-            <AuthProvider>
-                <LangSelect onSelect={() => setLangChosen(true)} />
-            </AuthProvider>
-        );
+        return <LangSelect onSelect={() => setLangChosen(true)} />;
     }
 
-    // 2-qadam: Buyurtma turi + manzil
+    // 2-qadam: Buyurtma turi
     if (!deliveryChosen) {
+        return <DeliveryTypeModal onSelect={() => setDeliveryChosen(true)} />;
+    }
+
+    // Auth yuklanmoqda
+    if (loading) {
         return (
-            <AuthProvider>
-                <DeliveryTypeModal onSelect={() => setDeliveryChosen(true)} />
-            </AuthProvider>
+            <div style={{
+                minHeight: '100vh', background: 'var(--bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+                <div className="spinner" />
+            </div>
         );
     }
 
+    // 3-qadam: Telefon tasdiqlash (ro'yxatdan o'tmagan bo'lsa)
+    if (user && !user.isProfileComplete) {
+        return <Onboarding />;
+    }
+
+    // Asosiy ilova
+    return (
+        <CartProvider>
+            <BrowserRouter>
+                <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/menu" element={<Menu />} />
+                    <Route path="/menu/:category" element={<Menu />} />
+                    <Route path="/product/:id" element={<ProductDetail />} />
+                    <Route path="/cart" element={<Cart />} />
+                    <Route path="/payment" element={<Payment />} />
+                    <Route path="/branches" element={<Branches />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/orders" element={<Orders />} />
+                    <Route path="/onboarding" element={<Navigate to="/" replace />} />
+                </Routes>
+            </BrowserRouter>
+        </CartProvider>
+    );
+}
+
+export default function App() {
     return (
         <AuthProvider>
-            <CartProvider>
-                <BrowserRouter>
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/menu" element={<Menu />} />
-                        <Route path="/menu/:category" element={<Menu />} />
-                        <Route path="/product/:id" element={<ProductDetail />} />
-                        <Route path="/cart" element={<Cart />} />
-                        <Route path="/payment" element={<Payment />} />
-                        <Route path="/branches" element={<Branches />} />
-                        <Route path="/profile" element={<Profile />} />
-                        <Route path="/orders" element={<Orders />} />
-                        <Route path="/onboarding" element={<Onboarding />} />
-                    </Routes>
-                </BrowserRouter>
-            </CartProvider>
+            <AppInner />
         </AuthProvider>
     );
 }
