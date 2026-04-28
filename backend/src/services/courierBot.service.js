@@ -5,10 +5,10 @@ const OrderStatusService = require('./orderStatus.service');
 const TelegramService = require('./telegram.service');
 
 // ─── Ikki-bot arxitektura ────────────────────────────────────────────────
-// BROADCAST bot (all_bot): buyurtma barcha faol kurierlarga yuboriladi.
+// BROADCAST bot (all_bot): buyurtma barcha smena'dagi kurierlarga yuboriladi.
 //   - "✅ Qabul qilish" tugmasi shu yerda.
 //   - Kim Qabul qilsa — hamma kurierlarda shu botdagi xabar o'chadi.
-// MISSION bot (eski dastafka bot): qabul qilgan kurierning shaxsiy ish joyi.
+// MISSION bot (dastafka bot): qabul qilgan kurierning shaxsiy ish joyi.
 //   - "🚗 Yo'lga chiqdim" va "✅ Yetkazildi" tugmalari shu yerda.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,9 @@ const MISSION_TOKEN = process.env.COURIER_MISSION_BOT_TOKEN;
 const MISSION_USERNAME = process.env.COURIER_MISSION_BOT_USERNAME || 'efes_kebab_dastafka_bot';
 const BASE_URL = process.env.BASE_URL || '';
 const WEBHOOK_SECRET = process.env.COURIER_WEBHOOK_SECRET || 'efes_courier_webhook_secret';
+
+// Qabul qilinmagan buyurtma uchun operator ogohlantirish vaqti (ms)
+const UNACCEPTED_TIMEOUT_MS = 5 * 60 * 1000;
 
 const BROADCAST_PATH = '/courier-webhook';
 const MISSION_PATH = '/courier-mission-webhook';
@@ -38,7 +41,6 @@ async function tgCall(api, method, payload) {
         const { data } = await api.post(method, payload);
         return data?.result || null;
     } catch (e) {
-        // 403 = user hasn't started the bot; boshqa xatolarni log qilamiz
         const err = e.response?.data || { description: e.message };
         if (err.error_code !== 403) {
             console.error(`Telegram ${method}:`, err);
@@ -58,11 +60,7 @@ function sendMessage(api, chatId, text, replyMarkup) {
 
 function sendLocation(api, chatId, lat, lng) {
     if (typeof lat !== 'number' || typeof lng !== 'number') return Promise.resolve(null);
-    return tgCall(api, '/sendLocation', {
-        chat_id: chatId,
-        latitude: lat,
-        longitude: lng,
-    });
+    return tgCall(api, '/sendLocation', { chat_id: chatId, latitude: lat, longitude: lng });
 }
 
 function deleteMessage(api, chatId, messageId) {
@@ -95,9 +93,12 @@ function hasGeo(order) {
         && typeof order.addressLng === 'number';
 }
 
-function mapLine() {
-    // Yandex Maps — inline tugma sifatida taqdim etiladi, shu bois matnda takrorlanmaydi
-    return '';
+function yandexMapsButton(order) {
+    if (!hasGeo(order)) return null;
+    return {
+        text: "🗺 Yandex Xaritada ko'rish",
+        url: `https://yandex.com/maps/?pt=${order.addressLng},${order.addressLat}&z=17&l=map`,
+    };
 }
 
 function formatBroadcast(order) {
@@ -117,7 +118,6 @@ function formatBroadcast(order) {
         `💰 Jami: <b>${order.total.toLocaleString()} so'm</b>\n` +
         `💳 To'lov: ${payLabel}\n` +
         `${addrLine}` +
-        mapLine(order) +
         (order.notes ? `\n📝 Izoh: ${order.notes}` : '');
 }
 
@@ -130,18 +130,9 @@ function formatMission(order, statusLabel) {
         `📋 <b>${order.orderNumber}</b>\n` +
         `👤 ${order.customerName}\n` +
         `📞 ${order.phone}\n` +
-        `${addrLine}` +
-        mapLine(order) + `\n` +
+        `${addrLine}\n` +
         `💰 <b>${order.total.toLocaleString()} so'm</b> · ${payLabel}\n\n` +
         `📍 <b>Holat:</b> ${statusLabel}`;
-}
-
-function yandexMapsButton(order) {
-    if (!hasGeo(order)) return null;
-    return {
-        text: "🗺 Yandex Xaritada ko'rish",
-        url: `https://yandex.com/maps/?pt=${order.addressLng},${order.addressLat}&z=17&l=map`,
-    };
 }
 
 function missionKeyboard(order) {
@@ -157,15 +148,22 @@ function missionKeyboard(order) {
     return { inline_keyboard: rows };
 }
 
-// ─── Asosiy servis ─────────────────────────────────────────────────────
-class CourierBotService {
-    static isEnabled() {
-        return !!broadcastApi;
+// ─── Smena matni ──────────────────────────────────────────────────────────
+function formatShiftStatus(courier) {
+    if (courier.onShift) {
+        const since = courier.shiftStartedAt
+            ? `(${Math.floor((Date.now() - courier.shiftStartedAt) / 60000)} daq.)`
+            : '';
+        return `✅ Smena davom etmoqda ${since}\n\n` +
+            `Tugatish uchun: /smena_yakunlash`;
     }
+    return `⏸ Smena to'xtatilgan.\n\nBoshlash uchun: /smena_boshlash`;
+}
 
-    static get webhookSecret() {
-        return WEBHOOK_SECRET;
-    }
+// ─── Asosiy servis ─────────────────────────────────────────────────────────
+class CourierBotService {
+    static isEnabled() { return !!broadcastApi; }
+    static get webhookSecret() { return WEBHOOK_SECRET; }
 
     static async registerWebhooks() {
         if (!BASE_URL) {
@@ -190,15 +188,21 @@ class CourierBotService {
         }
     }
 
-    // ─── Yangi buyurtma broadcast (yangi all_bot da) ────────────────
+    // ─── Yangi buyurtma broadcast (faqat smena'dagi kurierlarga) ────────
     static async broadcastNewOrder(order) {
         if (!broadcastApi) return;
 
         const couriers = await Courier.find({
             isActive: true,
+            onShift: true,
             telegramId: { $ne: null },
         });
-        if (couriers.length === 0) return;
+
+        if (couriers.length === 0) {
+            // Smena'da hech kim yo'q — operatorga xabar
+            await this._notifyNoActiveCouriers(order);
+            return;
+        }
 
         const text = formatBroadcast(order);
         const rows = [[{ text: '✅ Qabul qilish', callback_data: `accept_${order._id}` }]];
@@ -207,16 +211,11 @@ class CourierBotService {
         const replyMarkup = { inline_keyboard: rows };
 
         const broadcasts = [];
-        const geo = hasGeo(order);
         for (const c of couriers) {
             const sent = await sendMessage(broadcastApi, c.telegramId, text, replyMarkup);
             if (sent?.message_id) {
-                const entry = {
-                    courierId: c._id,
-                    chatId: c.telegramId,
-                    messageId: sent.message_id,
-                };
-                if (geo) {
+                const entry = { courierId: c._id, chatId: c.telegramId, messageId: sent.message_id };
+                if (hasGeo(order)) {
                     const loc = await sendLocation(broadcastApi, c.telegramId, order.addressLat, order.addressLng);
                     if (loc?.message_id) entry.locationMessageId = loc.message_id;
                 }
@@ -225,10 +224,52 @@ class CourierBotService {
         }
 
         if (broadcasts.length > 0) {
-            await Order.updateOne(
-                { _id: order._id },
-                { $set: { courierBroadcasts: broadcasts } },
-            );
+            await Order.updateOne({ _id: order._id }, { $set: { courierBroadcasts: broadcasts } });
+        }
+
+        // 5 daqiqa o'tsa va hech kim qabul qilmasa — operator ogohlantirish
+        setTimeout(() => this._checkUnacceptedOrder(order._id), UNACCEPTED_TIMEOUT_MS);
+    }
+
+    // ─── Qabul qilinmagan buyurtmani tekshirish ───────────────────────
+    static async _checkUnacceptedOrder(orderId) {
+        try {
+            const order = await Order.findById(orderId).populate('branch', 'operatorChatId');
+            if (!order) return;
+            if (order.courierId) return; // allaqachon qabul qilingan
+            if (!['confirmed', 'preparing', 'ready'].includes(order.status)) return;
+
+            const text = `⚠️ <b>Buyurtma ${UNACCEPTED_TIMEOUT_MS / 60000} daqiqa davomida qabul qilinmadi!</b>\n\n` +
+                `📋 <b>${order.orderNumber}</b>\n` +
+                `👤 ${order.customerName} | 📞 ${order.phone}\n` +
+                `💰 ${order.total.toLocaleString()} so'm\n\n` +
+                `Hech bir kurier smena'da yo'q yoki buyurtmani qabul qilmayapti.\n` +
+                `Admin paneldan qo'lda kurier tayinlang.`;
+
+            if (order.branch?.operatorChatId) {
+                await TelegramService.sendMessage(order.branch.operatorChatId, text);
+            }
+        } catch (e) {
+            console.error('_checkUnacceptedOrder:', e.message);
+        }
+    }
+
+    // ─── Smena'da hech kim yo'q — operator ogohlantirish ─────────────
+    static async _notifyNoActiveCouriers(order) {
+        try {
+            const branch = order.branch
+                ? await require('../models/Branch').findById(order.branch).select('operatorChatId')
+                : null;
+            if (!branch?.operatorChatId) return;
+
+            const text = `⚠️ <b>Smena'da faol kurier yo'q!</b>\n\n` +
+                `📋 <b>${order.orderNumber}</b> — ${order.customerName}\n` +
+                `💰 ${order.total.toLocaleString()} so'm\n\n` +
+                `Kurierlarni smena'ga undang yoki qo'lda tayinlang.`;
+
+            await TelegramService.sendMessage(branch.operatorChatId, text);
+        } catch (e) {
+            console.error('_notifyNoActiveCouriers:', e.message);
         }
     }
 
@@ -238,9 +279,7 @@ class CourierBotService {
         if (!order?.courierBroadcasts?.length) return;
         for (const b of order.courierBroadcasts) {
             await deleteMessage(broadcastApi, b.chatId, b.messageId);
-            if (b.locationMessageId) {
-                await deleteMessage(broadcastApi, b.chatId, b.locationMessageId);
-            }
+            if (b.locationMessageId) await deleteMessage(broadcastApi, b.chatId, b.locationMessageId);
         }
         await Order.updateOne({ _id: orderId }, { $unset: { courierBroadcasts: '' } });
     }
@@ -255,14 +294,13 @@ class CourierBotService {
             await answerCallbackQuery(broadcastApi, callback.id, "Siz ro'yxatda yo'qsiz yoki hisobingiz nofaol.", true);
             return;
         }
+        if (!courier.onShift) {
+            await answerCallbackQuery(broadcastApi, callback.id, "Smena'da emassiz. /smena_boshlash yozing.", true);
+            return;
+        }
 
-        // Atomar claim
         const order = await Order.findOneAndUpdate(
-            {
-                _id: orderId,
-                courierId: null,
-                status: { $in: ['confirmed', 'preparing', 'ready'] },
-            },
+            { _id: orderId, courierId: null, status: { $in: ['confirmed', 'preparing', 'ready'] } },
             { $set: { courierId: courier._id } },
             { new: true },
         );
@@ -284,17 +322,15 @@ class CourierBotService {
 
         await answerCallbackQuery(broadcastApi, callback.id, '✅ Buyurtma sizga biriktirildi');
 
-        // Hamma broadcast xabarlarini o'chirish (shu jumladan qabul qilganning)
+        // Barcha broadcast xabarlarini o'chirish
         const broadcasts = order.courierBroadcasts || [];
         for (const b of broadcasts) {
             await deleteMessage(broadcastApi, b.chatId, b.messageId);
-            if (b.locationMessageId) {
-                await deleteMessage(broadcastApi, b.chatId, b.locationMessageId);
-            }
+            if (b.locationMessageId) await deleteMessage(broadcastApi, b.chatId, b.locationMessageId);
         }
         await Order.updateOne({ _id: order._id }, { $unset: { courierBroadcasts: '' } });
 
-        // Mission botda shaxsiy vazifa xabari + lokatsiya pin
+        // Mission botda shaxsiy vazifa xabari
         const missionSent = await sendMessage(
             missionApi,
             tgId,
@@ -306,11 +342,10 @@ class CourierBotService {
         }
 
         if (!missionSent) {
-            // Mission botni hali ishga tushirmagan — broadcast botda ogohlantirish
             await sendMessage(
                 broadcastApi,
                 tgId,
-                `⚠️ Yetkazib berishni boshqarish uchun <a href="https://t.me/${MISSION_USERNAME}">@${MISSION_USERNAME}</a> ni oching va /start bosing. Shundan keyin vazifa xabari keladi.`,
+                `⚠️ Yetkazib berishni boshqarish uchun <a href="https://t.me/${MISSION_USERNAME}">@${MISSION_USERNAME}</a> ni oching va /start bosing.`,
             );
         }
     }
@@ -345,13 +380,7 @@ class CourierBotService {
 
         await answerCallbackQuery(missionApi, callback.id, "🚗 Yo'lga chiqdingiz");
         if (chatId && messageId) {
-            await editMessageText(
-                missionApi,
-                chatId,
-                messageId,
-                formatMission(order, "Yo'lda"),
-                missionKeyboard(order),
-            );
+            await editMessageText(missionApi, chatId, messageId, formatMission(order, "Yo'lda"), missionKeyboard(order));
         }
 
         TelegramService.notifyCustomerStatus(order, {
@@ -394,7 +423,7 @@ class CourierBotService {
         await answerCallbackQuery(missionApi, callback.id, '🎉 Yetkazib berildi!');
 
         const bonusLine = courier.bonusEnabled && courier.bonusPerDelivery > 0
-            ? `\n\n🎁 +${courier.bonusPerDelivery.toLocaleString()} so'm bonus`
+            ? `\n\n🎁 +${courier.bonusPerDelivery.toLocaleString()} so'm bonus hisoblandi`
             : '';
         const finalText = `🎉 <b>Yetkazib berildi</b>\n\n` +
             `📋 <b>${order.orderNumber}</b>\n` +
@@ -409,7 +438,86 @@ class CourierBotService {
         TelegramService.notifyCustomerStatus(order).catch(() => {});
     }
 
-    // ─── /start — broadcast botda: ro'yxatdan o'tish ──────────────────
+    // ─── Smena boshlash ───────────────────────────────────────────────
+    static async handleShiftStart(msg) {
+        const chatId = msg.chat.id;
+        const tgId = msg.from.id;
+
+        const courier = await Courier.findOne({ telegramId: tgId, isActive: true });
+        if (!courier) {
+            await sendMessage(broadcastApi, chatId, "❌ Siz ro'yxatda yo'qsiz. Admindan taklif linkini so'rang.");
+            return;
+        }
+        if (courier.onShift) {
+            await sendMessage(broadcastApi, chatId, `✅ Smena allaqachon boshlangan.\n\nTugatish: /smena_yakunlash`);
+            return;
+        }
+
+        await Courier.updateOne({ _id: courier._id }, { onShift: true, shiftStartedAt: new Date() });
+        await sendMessage(broadcastApi, chatId,
+            `✅ <b>Smena boshlandi!</b>\n\nEndi yangi buyurtmalar sizga keladi.\n\nTugatish uchun: /smena_yakunlash`
+        );
+    }
+
+    // ─── Smena yakunlash ──────────────────────────────────────────────
+    static async handleShiftEnd(msg) {
+        const chatId = msg.chat.id;
+        const tgId = msg.from.id;
+
+        const courier = await Courier.findOne({ telegramId: tgId, isActive: true });
+        if (!courier) {
+            await sendMessage(broadcastApi, chatId, "❌ Siz ro'yxatda yo'qsiz.");
+            return;
+        }
+        if (!courier.onShift) {
+            await sendMessage(broadcastApi, chatId, `⏸ Smena allaqachon to'xtatilgan.\n\nBoshlash: /smena_boshlash`);
+            return;
+        }
+
+        // Aktiv buyurtmani tekshirish
+        const activeOrder = await Order.findOne({
+            courierId: courier._id,
+            status: { $in: ['confirmed', 'preparing', 'ready', 'on_the_way'] },
+        });
+        if (activeOrder) {
+            await sendMessage(broadcastApi, chatId,
+                `⚠️ Sizda hali tugallanmagan buyurtma bor: <b>${activeOrder.orderNumber}</b>\n\n` +
+                `Avval uni yetkazib bering, keyin smenani tugatishingiz mumkin.`
+            );
+            return;
+        }
+
+        const started = courier.shiftStartedAt;
+        const durationMin = started ? Math.floor((Date.now() - started) / 60000) : 0;
+        await Courier.updateOne({ _id: courier._id }, { onShift: false, shiftStartedAt: null });
+
+        const todayDeliveries = await Order.countDocuments({
+            courierId: courier._id,
+            status: 'delivered',
+            deliveredAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        });
+
+        await sendMessage(broadcastApi, chatId,
+            `⏸ <b>Smena yakunlandi.</b>\n\n` +
+            `⏱ Davomiyligi: ${durationMin} daqiqa\n` +
+            `📦 Bugun yetkazildi: ${todayDeliveries} ta buyurtma\n` +
+            `💰 Bonus: ${(todayDeliveries * courier.bonusPerDelivery).toLocaleString()} so'm\n\n` +
+            `Qaytib kelishingizni kutamiz! 👋`
+        );
+    }
+
+    // ─── /smena — holat ko'rish ───────────────────────────────────────
+    static async handleShiftStatus(msg) {
+        const chatId = msg.chat.id;
+        const courier = await Courier.findOne({ telegramId: msg.from.id, isActive: true });
+        if (!courier) {
+            await sendMessage(broadcastApi, chatId, "❌ Siz ro'yxatda yo'qsiz.");
+            return;
+        }
+        await sendMessage(broadcastApi, chatId, formatShiftStatus(courier));
+    }
+
+    // ─── /start — broadcast botda ─────────────────────────────────────
     static async handleBroadcastStart(msg) {
         const chatId = msg.chat.id;
         const from = msg.from;
@@ -426,6 +534,7 @@ class CourierBotService {
                 await sendMessage(broadcastApi, chatId,
                     `✅ <b>${courier.name}</b>, xush kelibsiz!\n\n` +
                     `Yangi buyurtmalar shu yerda ko'rinadi.\n\n` +
+                    `Smena boshlash: /smena_boshlash\n\n` +
                     `⚠️ <b>Muhim:</b> yetkazib berishni boshqarish uchun ` +
                     `<a href="https://t.me/${MISSION_USERNAME}">@${MISSION_USERNAME}</a> ` +
                     `ni ham oching va /start bosing.`,
@@ -439,7 +548,8 @@ class CourierBotService {
         const existing = await Courier.findOne({ telegramId: from.id, isActive: true });
         if (existing) {
             await sendMessage(broadcastApi, chatId,
-                `Salom, <b>${existing.name}</b>!\nYangi buyurtmalar shu yerda ko'rinadi.\n` +
+                `Salom, <b>${existing.name}</b>!\n\n` +
+                formatShiftStatus(existing) + '\n\n' +
                 `Yetkazib berishni boshqarish: <a href="https://t.me/${MISSION_USERNAME}">@${MISSION_USERNAME}</a>`,
             );
         } else {
@@ -449,32 +559,77 @@ class CourierBotService {
         }
     }
 
-    // ─── /start — mission botda: tasdiqlash ───────────────────────────
+    // ─── /start — mission botda ───────────────────────────────────────
     static async handleMissionStart(msg) {
         const chatId = msg.chat.id;
         const from = msg.from;
+
         const existing = await Courier.findOne({ telegramId: from.id, isActive: true });
-        if (existing) {
-            await sendMessage(missionApi, chatId,
-                `✅ Salom, <b>${existing.name}</b>!\n\n` +
-                `Siz qabul qilgan buyurtmalar shu yerda ko'rinadi — yetkazib berish tugmalari bilan.`,
-            );
-        } else {
+        if (!existing) {
             await sendMessage(missionApi, chatId,
                 `❌ Siz ro'yxatda yo'qsiz.\n\n` +
                 `Avval <a href="https://t.me/${BROADCAST_USERNAME}">@${BROADCAST_USERNAME}</a> ` +
                 `da taklif linki orqali ro'yxatdan o'ting.`,
             );
+            return;
+        }
+
+        // Aktiv buyurtmalarni ko'rsatish
+        const activeOrders = await Order.find({
+            courierId: existing._id,
+            status: { $in: ['confirmed', 'preparing', 'ready', 'on_the_way'] },
+        }).sort({ createdAt: -1 });
+
+        if (activeOrders.length === 0) {
+            await sendMessage(missionApi, chatId,
+                `✅ Salom, <b>${existing.name}</b>!\n\n` +
+                `Hozircha aktiv buyurtma yo'q.\n` +
+                `Yangi buyurtmalar @${BROADCAST_USERNAME} botida ko'rinadi.`,
+            );
+            return;
+        }
+
+        await sendMessage(missionApi, chatId,
+            `✅ Salom, <b>${existing.name}</b>! Sizda <b>${activeOrders.length}</b> ta aktiv buyurtma bor:`,
+        );
+
+        for (const order of activeOrders) {
+            const statusLabel = {
+                confirmed: 'Tasdiqlangan',
+                preparing: 'Tayyorlanmoqda',
+                ready: 'Tayyor',
+                on_the_way: "Yo'lda",
+            }[order.status] || order.status;
+
+            await sendMessage(missionApi, chatId, formatMission(order, statusLabel), missionKeyboard(order));
+            if (hasGeo(order)) {
+                await sendLocation(missionApi, chatId, order.addressLat, order.addressLng);
+            }
         }
     }
 
     // ─── Update yo'naltiruvchilari ────────────────────────────────────
     static async handleBroadcastUpdate(update) {
         try {
-            if (update.message?.text?.startsWith('/start')) {
+            const text = update.message?.text || '';
+
+            if (text.startsWith('/start')) {
                 await this.handleBroadcastStart(update.message);
                 return;
             }
+            if (text === '/smena_boshlash') {
+                await this.handleShiftStart(update.message);
+                return;
+            }
+            if (text === '/smena_yakunlash') {
+                await this.handleShiftEnd(update.message);
+                return;
+            }
+            if (text === '/smena') {
+                await this.handleShiftStatus(update.message);
+                return;
+            }
+
             if (update.callback_query) {
                 const cb = update.callback_query;
                 if (cb.data?.startsWith('accept_')) {
@@ -494,6 +649,7 @@ class CourierBotService {
                 await this.handleMissionStart(update.message);
                 return;
             }
+
             if (update.callback_query) {
                 const cb = update.callback_query;
                 if (cb.data?.startsWith('ontheway_')) {

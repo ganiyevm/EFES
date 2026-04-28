@@ -126,7 +126,10 @@ router.post('/', authTelegram, async (req, res) => {
             const paymeData = Buffer.from(
                 `m=${process.env.PAYME_MERCHANT_ID};ac.order_id=${order.orderNumber};a=${total * 100};l=uz`
             ).toString('base64');
-            paymentUrl = `https://checkout.paycom.uz/${paymeData}`;
+            const checkoutHost = process.env.PAYME_TEST_MODE === 'true'
+                ? 'checkout.test.paycom.uz'
+                : 'checkout.paycom.uz';
+            paymentUrl = `https://${checkoutHost}/${paymeData}`;
         }
 
         // Mijozga tasdiq + (naqd to'lovda) operatorga xabar

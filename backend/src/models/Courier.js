@@ -11,6 +11,8 @@ const courierSchema = new mongoose.Schema({
     inviteToken: { type: String, unique: true, required: true, index: true },
 
     isActive: { type: Boolean, default: true },
+    onShift: { type: Boolean, default: false },  // smena holati
+    shiftStartedAt: { type: Date, default: null },
     bonusEnabled: { type: Boolean, default: true },
     bonusPerDelivery: { type: Number, default: 5000 },
     earnedBonus: { type: Number, default: 0 },

@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Courier = require('../models/Courier');
+const BonusTransaction = require('../models/BonusTransaction');
 const BonusService = require('./bonus.service');
 
 // Buyurtma status o'zgarishining yon-ta'sirlarini markazlashtiradi
@@ -30,6 +31,15 @@ class OrderStatusService {
                         { _id: courier._id },
                         { $inc: { earnedBonus: courier.bonusPerDelivery } },
                     );
+                    await BonusTransaction.create({
+                        courier: courier._id,
+                        courierTelegramId: courier.telegramId,
+                        entityType: 'courier',
+                        type: 'earned',
+                        amount: courier.bonusPerDelivery,
+                        order: order._id,
+                        description: `${order.orderNumber} yetkazib berildi — ${courier.bonusPerDelivery.toLocaleString()} so'm bonus`,
+                    });
                 }
             }
         }

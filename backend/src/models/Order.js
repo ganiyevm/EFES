@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Counter = require('./Counter');
 
 const orderItemSchema = new mongoose.Schema({
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
@@ -109,15 +110,11 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Auto-generate orderNumber: EFES-0001, EFES-0002, ...
+// $inc atomic operation — parallel buyurtmalarda bir xil raqam chiqmaydi
 orderSchema.pre('save', async function (next) {
     if (!this.orderNumber) {
-        const last = await this.constructor.findOne({}, { orderNumber: 1 }, { sort: { createdAt: -1 } });
-        let num = 1;
-        if (last?.orderNumber) {
-            const match = last.orderNumber.match(/EFES-(\d+)/);
-            if (match) num = parseInt(match[1]) + 1;
-        }
-        this.orderNumber = 'EFES-' + String(num).padStart(4, '0');
+        const seq = await Counter.nextSeq('order');
+        this.orderNumber = 'EFES-' + String(seq).padStart(4, '0');
     }
     // Naqd to'lovda to'g'ridan-to'g'ri operatorga o'tadi
     if (this.paymentMethod === 'cash' && this.status === 'awaiting_payment') {
