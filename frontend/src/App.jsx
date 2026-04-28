@@ -42,12 +42,7 @@ function AppInner() {
         );
     }
 
-    // 3-qadam: Telefon tasdiqlash (ro'yxatdan o'tmagan bo'lsa)
-    if (user && !user.isProfileComplete) {
-        return <Onboarding />;
-    }
-
-    // Asosiy ilova
+    // Asosiy ilova — telefon tasdiqlash checkout da so'raladi
     return (
         <CartProvider>
             <BrowserRouter>
