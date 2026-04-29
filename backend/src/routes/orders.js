@@ -122,6 +122,7 @@ router.post('/', authTelegram, async (req, res) => {
             }
             if (returnUrl) params.set('return_url', returnUrl);
             paymentUrl = `https://my.click.uz/services/pay?${params}`;
+            console.log('[CLICK URL]', paymentUrl);
         } else if (paymentMethod === 'payme') {
             const paymeData = Buffer.from(
                 `m=${process.env.PAYME_MERCHANT_ID};ac.order_id=${order.orderNumber};a=${total * 100};l=uz`
