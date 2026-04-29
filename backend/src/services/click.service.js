@@ -39,7 +39,7 @@ class ClickService {
             if (order.paymentStatus === 'paid') {
                 return { error: -4, error_note: 'Already paid', click_trans_id, merchant_trans_id };
             }
-            if (parseFloat(amount) !== order.total) {
+            if (Math.abs(parseFloat(amount) - order.total) > 0.01) {
                 return { error: -2, error_note: 'Incorrect amount', click_trans_id, merchant_trans_id };
             }
 
@@ -87,7 +87,7 @@ class ClickService {
             if (order.clickPrepareId && order.clickPrepareId !== String(merchant_prepare_id)) {
                 return { error: -6, error_note: 'Transaction not found (prepare_id mismatch)', click_trans_id, merchant_trans_id };
             }
-            if (parseFloat(amount) !== order.total) {
+            if (Math.abs(parseFloat(amount) - order.total) > 0.01) {
                 return { error: -2, error_note: 'Incorrect amount', click_trans_id, merchant_trans_id };
             }
 

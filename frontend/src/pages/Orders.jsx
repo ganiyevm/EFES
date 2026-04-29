@@ -143,6 +143,12 @@ function OrderDetail({ order, onClose, t }) {
                         <span>−{order.bonusDiscount.toLocaleString()} so'm</span>
                     </div>
                 )}
+                {order.promoDiscount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: '#2ecc71' }}>
+                        <span>Promo chegirma</span>
+                        <span>−{order.promoDiscount.toLocaleString()} so'm</span>
+                    </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 17, marginTop: 4 }}>
                     <span>{t('orderTotal')}</span>
                     <span style={{

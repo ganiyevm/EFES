@@ -22,6 +22,7 @@ const orderSchema = new mongoose.Schema({
     telegramId: Number,
     customerName: { type: String, default: '' },
     phone: { type: String, default: '' },
+    extraPhone: { type: String, default: '' },
 
     items: [orderItemSchema],
 

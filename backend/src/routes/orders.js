@@ -11,7 +11,7 @@ const { getDeliveryConfig } = require('../utils/deliveryConfig');
 // ─── Yangi buyurtma ───
 router.post('/', authTelegram, async (req, res) => {
     try {
-        const { items, branch, deliveryType, address, addressLat, addressLng, paymentMethod, phone, bonusDiscount = 0, notes, promoCode } = req.body;
+        const { items, branch, deliveryType, address, addressLat, addressLng, paymentMethod, phone, extraPhone, bonusDiscount = 0, notes, promoCode } = req.body;
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
@@ -83,6 +83,7 @@ router.post('/', authTelegram, async (req, res) => {
             telegramId: user.telegramId,
             customerName: `${user.firstName} ${user.lastName}`.trim(),
             phone: phone || user.phone,
+            extraPhone: extraPhone || '',
             items: orderItems,
             branch,
             deliveryType,
