@@ -38,12 +38,16 @@ router.get('/click/prepare', (req, res) => res.json({ error: 0, error_note: 'OK'
 router.get('/click/complete', (req, res) => res.json({ error: 0, error_note: 'OK' }));
 
 router.post('/click/prepare', async (req, res) => {
-    const result = await ClickService.prepare(req.body);
+    console.log('[CLICK PREPARE RAW] headers:', JSON.stringify(req.headers['content-type']), 'body:', JSON.stringify(req.body), 'query:', JSON.stringify(req.query));
+    const body = Object.keys(req.body).length ? req.body : req.query;
+    const result = await ClickService.prepare(body);
     res.json(result);
 });
 
 router.post('/click/complete', async (req, res) => {
-    const result = await ClickService.complete(req.body);
+    console.log('[CLICK COMPLETE RAW] headers:', JSON.stringify(req.headers['content-type']), 'body:', JSON.stringify(req.body), 'query:', JSON.stringify(req.query));
+    const body = Object.keys(req.body).length ? req.body : req.query;
+    const result = await ClickService.complete(body);
     res.json(result);
 });
 
