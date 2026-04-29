@@ -116,6 +116,7 @@ router.post('/', authTelegram, async (req, res) => {
                 merchant_id: process.env.CLICK_MERCHANT_ID || '',
                 amount: String(total),
                 transaction_param: order.orderNumber,
+                merchant_order_id: order.orderNumber,
             });
             if (process.env.CLICK_MERCHANT_USER_ID) {
                 params.set('merchant_user_id', process.env.CLICK_MERCHANT_USER_ID);
