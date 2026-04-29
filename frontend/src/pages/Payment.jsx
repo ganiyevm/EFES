@@ -99,7 +99,7 @@ export default function Payment() {
     const providerName = method === 'payme' ? 'Payme' : 'Click';
     const payUrl = payUrlFromServer || (method === 'payme'
         ? `https://checkout.paycom.uz/${import.meta.env.VITE_PAYME_ID}?amount=${total * 100}&order=${orderId}`
-        : `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID}&amount=${total}&transaction_param=${orderId}`);
+        : `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID}&amount=${total}&transaction_param=${orderNum}`);
 
     return (
         <div style={pageStyle}>
