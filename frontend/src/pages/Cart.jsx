@@ -49,7 +49,8 @@ export default function Cart() {
     const [deliveryTime, setDeliveryTime] = useState('');
 
     // Contact
-    const [extraPhone, setExtraPhone] = useState('');
+    const [extraPhone, setExtraPhone] = useState('+998');
+    const [extraPhoneError, setExtraPhoneError] = useState('');
 
     // Branch
     const [branches, setBranches] = useState([]);
@@ -132,6 +133,15 @@ export default function Cart() {
         if (deliveryType === 'pickup' && !selectedBranch) {
             alert(t('branchRequired')); return;
         }
+
+        // Qo'shimcha telefon validatsiyasi
+        const phoneDigits = extraPhone.replace(/\D/g, '');
+        if (phoneDigits.length < 12) {
+            setExtraPhoneError("To'liq telefon raqam kiriting: +998 XX XXX XX XX");
+            document.getElementById('extra-phone-input')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        setExtraPhoneError('');
 
         setSubmitting(true);
         try {
@@ -383,16 +393,34 @@ export default function Cart() {
                 </Section>
 
                 {/* ── Extra phone ── */}
-                <Section title="📞 Qo'shimcha telefon (ixtiyoriy)">
+                <Section title="📞 Telefon raqam *">
                     <input
+                        id="extra-phone-input"
                         value={extraPhone}
-                        onChange={e => setExtraPhone(e.target.value)}
+                        onChange={e => {
+                            let v = e.target.value;
+                            if (!v.startsWith('+998')) v = '+998';
+                            const digits = v.replace(/\D/g, '');
+                            if (digits.length <= 12) setExtraPhone('+' + digits);
+                            if (extraPhoneError) setExtraPhoneError('');
+                        }}
                         placeholder="+998 90 123 45 67"
                         type="tel"
-                        style={IS}
-                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                        style={{
+                            ...IS,
+                            border: `1.5px solid ${extraPhoneError ? '#e74c3c' : 'var(--border)'}`,
+                        }}
+                        onFocus={e => e.target.style.borderColor = extraPhoneError ? '#e74c3c' : 'var(--primary)'}
+                        onBlur={e => e.target.style.borderColor = extraPhoneError ? '#e74c3c' : 'var(--border)'}
                     />
+                    {extraPhoneError && (
+                        <div style={{ color: '#e74c3c', fontSize: 12, marginTop: 6 }}>
+                            {extraPhoneError}
+                        </div>
+                    )}
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 6 }}>
+                        Yetkazib beruvchi siz bilan bog'lanadi
+                    </div>
                 </Section>
 
                 {/* ── Payment ── */}
