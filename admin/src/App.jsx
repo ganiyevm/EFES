@@ -9,6 +9,7 @@ import CouriersList from './pages/couriers/CouriersList';
 import UsersList from './pages/users/UsersList';
 import ImportPage from './pages/import/ImportPage';
 import DeliverySettings from './pages/settings/DeliverySettings';
+import AppContentSettings from './pages/settings/AppContentSettings';
 import AdminAccountsPage from './pages/accounts/AdminAccountsPage';
 import PromotionsPage from './pages/promotions/PromotionsPage';
 import Sidebar from './components/Sidebar';
@@ -39,6 +40,7 @@ export default function App() {
                                     <Route path="delivery" element={<DeliverySettings />} />
                                     <Route path="accounts" element={<AdminAccountsPage />} />
                                     <Route path="promotions" element={<PromotionsPage />} />
+                                    <Route path="app-content" element={<AppContentSettings />} />
                                 </Routes>
                             </div>
                         </div>

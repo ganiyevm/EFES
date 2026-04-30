@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
+import api from '../api';
 
-const PHONE = '+998 71 200-94-44';
-const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'efes_kebab_bot';
+const DEFAULTS = {
+    phone: '+998 71 200-94-44',
+    telegram: import.meta.env.VITE_BOT_USERNAME || 'efes_kebab_bot',
+    instagram: 'efeskebab',
+    about_description: 'EFES Kebab — Toshkentdagi eng yaxshi Turk taomlari restoranidir.',
+    about_address: 'Toshkent shahri, Yunusobod tumani',
+    about_work_hours: 'Har kuni 10:00 – 23:00',
+    jobs_positions: ['Oshpaz', 'Ofitsiant', 'Kassir', 'Yetkazib beruvchi'],
+    delivery_time: '30–60 daqiqa ichida',
+    delivery_cost_text: '15 000 so\'mdan',
+    delivery_free_text: '150 000 so\'mdan yuqori buyurtmalarda',
+    delivery_zone: 'Toshkent shahri bo\'ylab',
+    delivery_work_hours: 'Har kuni 10:00 – 23:00',
+    delivery_min_order: '50 000 so\'m',
+};
 
 const ICON = ({ d, size = 22 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -36,10 +50,17 @@ function InfoModal({ title, onClose, children }) {
 export default function SideMenu({ onClose, onLangOpen }) {
     const navigate = useNavigate();
     const { lang } = useT();
-    const [modal, setModal] = useState(null); // 'about' | 'jobs' | 'delivery' | 'contact'
+    const [modal, setModal] = useState(null);
+    const [content, setContent] = useState(DEFAULTS);
     const [isDark, setIsDark] = useState(() =>
         document.documentElement.getAttribute('data-theme') !== 'light'
     );
+
+    useEffect(() => {
+        api.get('/delivery/app-content')
+            .then(r => setContent({ ...DEFAULTS, ...r.data }))
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         const saved = localStorage.getItem('efes_theme');
@@ -187,7 +208,7 @@ export default function SideMenu({ onClose, onLangOpen }) {
                     </button>
 
                     {/* Phone */}
-                    <a href={`tel:${PHONE.replace(/\s/g, '')}`} style={{
+                    <a href={`tel:${(content.phone || '').replace(/\s/g, '')}`} style={{
                         display: 'flex', alignItems: 'center', gap: 16,
                         padding: '15px 20px', textDecoration: 'none',
                         color: '#1A1A1A', borderBottom: '1px solid #F5F0EA',
@@ -195,7 +216,7 @@ export default function SideMenu({ onClose, onLangOpen }) {
                         <span style={{ color: '#666', flexShrink: 0 }}>
                             <ICON d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.35 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
                         </span>
-                        <span style={{ fontSize: 15, fontWeight: 500 }}>{PHONE}</span>
+                        <span style={{ fontSize: 15, fontWeight: 500 }}>{content.phone}</span>
                     </a>
                 </div>
             </div>
@@ -204,22 +225,18 @@ export default function SideMenu({ onClose, onLangOpen }) {
             {modal === 'about' && (
                 <InfoModal title="Biz haqimizda" onClose={closeModal}>
                     <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 16 }}>🍽</div>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7, marginBottom: 12 }}>
-                        <b style={{ color: 'var(--text)' }}>EFES Kebab</b> — Toshkentdagi eng yaxshi Turk taomlari restoranidir.
-                        Biz 2018-yildan beri o'z mijozlarimizga yuqori sifatli va mazali taomlar taqdim etib kelmoqdamiz.
-                    </p>
                     <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
-                        Barcha taomlarimiz faqat yangi mahsulotlardan tayyorlanadi va an'anaviy Turk retseptlari asosida pishiriladi.
+                        {content.about_description}
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-secondary)' }}>
-                            <span>📍</span> Toshkent shahri, Yunusobod tumani
+                            <span>📍</span> {content.about_address}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-secondary)' }}>
-                            <span>🕐</span> Har kuni 10:00 – 23:00
+                            <span>🕐</span> {content.about_work_hours}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-secondary)' }}>
-                            <span>📞</span> {PHONE}
+                            <span>📞</span> {content.phone}
                         </div>
                     </div>
                 </InfoModal>
@@ -230,11 +247,11 @@ export default function SideMenu({ onClose, onLangOpen }) {
                 <InfoModal title="Ish o'rinlari" onClose={closeModal}>
                     <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 16 }}>💼</div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
-                        EFES Kebab jamoasiga qo'shiling! Biz doim iqtidorli va mehnatsevar xodimlarn izlaymiz.
+                        EFES Kebab jamoasiga qo'shiling! Biz doim iqtidorli va mehnatsevar xodimlarni izlaymiz.
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                        {['Oshpaz', 'Ofitsiant', 'Kassir', 'Yetkazib beruvchi', 'Tozalovchi'].map(job => (
-                            <div key={job} style={{
+                        {(content.jobs_positions || []).map((job, i) => (
+                            <div key={i} style={{
                                 display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '12px 14px', background: 'var(--bg-secondary)',
                                 borderRadius: 12, fontSize: 14, fontWeight: 600,
@@ -243,7 +260,7 @@ export default function SideMenu({ onClose, onLangOpen }) {
                             </div>
                         ))}
                     </div>
-                    <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" style={{
+                    <a href={`https://t.me/${content.telegram}`} target="_blank" rel="noreferrer" style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                         width: '100%', padding: '14px', borderRadius: 14,
                         background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
@@ -259,12 +276,12 @@ export default function SideMenu({ onClose, onLangOpen }) {
                 <InfoModal title="Yetkazib berish" onClose={closeModal}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                         {[
-                            { icon: '🚗', title: 'Yetkazib berish vaqti', desc: '30–60 daqiqa ichida' },
-                            { icon: '💰', title: 'Yetkazib berish narxi', desc: '15 000 so\'mdan' },
-                            { icon: '🎁', title: 'Bepul yetkazib berish', desc: '150 000 so\'mdan yuqori buyurtmalarda' },
-                            { icon: '📍', title: 'Yetkazib berish zonasi', desc: 'Toshkent shahri bo\'ylab' },
-                            { icon: '🕐', title: 'Ish vaqti', desc: 'Har kuni 10:00 – 23:00' },
-                            { icon: '📦', title: 'Minimal buyurtma', desc: '50 000 so\'m' },
+                            { icon: '🚗', title: 'Yetkazib berish vaqti', desc: content.delivery_time },
+                            { icon: '💰', title: 'Yetkazib berish narxi', desc: content.delivery_cost_text },
+                            { icon: '🎁', title: 'Bepul yetkazib berish', desc: content.delivery_free_text },
+                            { icon: '📍', title: 'Yetkazib berish zonasi', desc: content.delivery_zone },
+                            { icon: '🕐', title: 'Ish vaqti', desc: content.delivery_work_hours },
+                            { icon: '📦', title: 'Minimal buyurtma', desc: content.delivery_min_order },
                         ].map((item, i) => (
                             <div key={i} style={{
                                 display: 'flex', gap: 14, alignItems: 'flex-start',
@@ -286,7 +303,7 @@ export default function SideMenu({ onClose, onLangOpen }) {
             {modal === 'contact' && (
                 <InfoModal title="Biz bilan bog'lanish" onClose={closeModal}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <a href={`tel:${PHONE.replace(/\s/g, '')}`} style={{
+                        <a href={`tel:${(content.phone || '').replace(/\s/g, '')}`} style={{
                             display: 'flex', alignItems: 'center', gap: 14,
                             padding: '14px 16px', background: 'var(--bg-secondary)',
                             borderRadius: 14, textDecoration: 'none', color: 'var(--text)',
@@ -294,10 +311,10 @@ export default function SideMenu({ onClose, onLangOpen }) {
                             <span style={{ fontSize: 24 }}>📞</span>
                             <div>
                                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>Telefon</div>
-                                <div style={{ fontWeight: 700, fontSize: 15 }}>{PHONE}</div>
+                                <div style={{ fontWeight: 700, fontSize: 15 }}>{content.phone}</div>
                             </div>
                         </a>
-                        <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" style={{
+                        <a href={`https://t.me/${content.telegram}`} target="_blank" rel="noreferrer" style={{
                             display: 'flex', alignItems: 'center', gap: 14,
                             padding: '14px 16px', background: 'rgba(0,136,204,0.08)',
                             borderRadius: 14, textDecoration: 'none', color: 'var(--text)',
@@ -306,21 +323,23 @@ export default function SideMenu({ onClose, onLangOpen }) {
                             <span style={{ fontSize: 24 }}>✈️</span>
                             <div>
                                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>Telegram</div>
-                                <div style={{ fontWeight: 700, fontSize: 15, color: '#0088cc' }}>@{BOT_USERNAME}</div>
+                                <div style={{ fontWeight: 700, fontSize: 15, color: '#0088cc' }}>@{content.telegram}</div>
                             </div>
                         </a>
-                        <a href="https://instagram.com/efeskebab" target="_blank" rel="noreferrer" style={{
-                            display: 'flex', alignItems: 'center', gap: 14,
-                            padding: '14px 16px', background: 'rgba(225,48,108,0.07)',
-                            borderRadius: 14, textDecoration: 'none', color: 'var(--text)',
-                            border: '1px solid rgba(225,48,108,0.15)',
-                        }}>
-                            <span style={{ fontSize: 24 }}>📸</span>
-                            <div>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>Instagram</div>
-                                <div style={{ fontWeight: 700, fontSize: 15, color: '#e1306c' }}>@efeskebab</div>
-                            </div>
-                        </a>
+                        {content.instagram && (
+                            <a href={`https://instagram.com/${content.instagram}`} target="_blank" rel="noreferrer" style={{
+                                display: 'flex', alignItems: 'center', gap: 14,
+                                padding: '14px 16px', background: 'rgba(225,48,108,0.07)',
+                                borderRadius: 14, textDecoration: 'none', color: 'var(--text)',
+                                border: '1px solid rgba(225,48,108,0.15)',
+                            }}>
+                                <span style={{ fontSize: 24 }}>📸</span>
+                                <div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>Instagram</div>
+                                    <div style={{ fontWeight: 700, fontSize: 15, color: '#e1306c' }}>@{content.instagram}</div>
+                                </div>
+                            </a>
+                        )}
                     </div>
                 </InfoModal>
             )}

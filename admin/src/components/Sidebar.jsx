@@ -10,6 +10,7 @@ const NAV = [
     { to: '/admin/promotions', icon: '🎁', label: 'Aksiyalar' },
     { to: '/admin/import', icon: '📥', label: 'Import' },
     { to: '/admin/delivery', icon: '🚗', label: 'Yetkazib berish' },
+    { to: '/admin/app-content', icon: '📱', label: 'Ilova kontenti' },
     { to: '/admin/accounts', icon: '🔐', label: 'Adminlar' },
 ];
 
