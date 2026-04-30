@@ -4,6 +4,7 @@ import { useCart } from '../context/CartContext';
 import { useT } from '../i18n';
 import api from '../api';
 import { getProductImage } from '../utils/productImage';
+import BottomNav from '../components/BottomNav';
 
 export default function ProductDetail() {
     const { id } = useParams();
@@ -51,17 +52,23 @@ export default function ProductDetail() {
                 {/* Gradient overlay */}
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, background: 'linear-gradient(transparent, var(--bg))' }} />
 
-                {/* Back button */}
+                {/* Back button — large and visible */}
                 <button
                     onClick={() => navigate(-1)}
                     style={{
                         position: 'absolute', top: 16, left: 16,
-                        background: 'rgba(13,13,20,0.6)', border: '1px solid rgba(212,160,23,0.2)',
-                        borderRadius: 14, width: 42, height: 42, color: '#fff', fontSize: 18,
-                        cursor: 'pointer', backdropFilter: 'blur(8px)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'rgba(13,13,20,0.75)', border: '1.5px solid rgba(255,255,255,0.18)',
+                        borderRadius: 16, height: 48, paddingLeft: 14, paddingRight: 18,
+                        color: '#fff', fontSize: 15, fontWeight: 700,
+                        cursor: 'pointer', backdropFilter: 'blur(12px)',
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                        fontFamily: 'inherit',
                     }}
-                >←</button>
+                >
+                    <span style={{ fontSize: 20, lineHeight: 1 }}>←</span>
+                    <span>{t('back')}</span>
+                </button>
 
                 {/* Badges */}
                 <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -72,7 +79,7 @@ export default function ProductDetail() {
             </div>
 
             {/* ── Content ── */}
-            <div style={{ padding: '20px 20px 130px', marginTop: -20, position: 'relative' }}>
+            <div style={{ padding: '20px 20px 210px', marginTop: -20, position: 'relative' }}>
                 <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 8, lineHeight: 1.3 }}>
                     {product.name}
                 </div>
@@ -143,11 +150,11 @@ export default function ProductDetail() {
                 </div>
             </div>
 
-            {/* ── Bottom Bar ── */}
+            {/* ── Bottom Bar (above BottomNav) ── */}
             <div style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0,
-                background: 'rgba(13,13,20,0.92)', borderTop: '1px solid var(--border)',
-                padding: '12px 20px 28px', backdropFilter: 'blur(20px)',
+                position: 'fixed', bottom: 68, left: 0, right: 0,
+                background: 'rgba(13,13,20,0.95)', borderTop: '1px solid var(--border)',
+                padding: '12px 20px 14px', backdropFilter: 'blur(20px)',
             }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', maxWidth: 480, margin: '0 auto' }}>
                     {/* Qty */}
@@ -198,6 +205,8 @@ export default function ProductDetail() {
                     </button>
                 </div>
             </div>
+
+            <BottomNav />
         </div>
     );
 }
