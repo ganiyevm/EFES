@@ -1,7 +1,89 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../api/axios';
 
 const EMPTY = { number: '', name: '', address: '', phone: '', hours: '10:00 — 23:00', isOpen: true, isActive: true, deliveryRadius: 5, minOrderAmount: 30000, location: { lat: '', lng: '' } };
+
+function MapPicker({ lat, lng, onChange }) {
+    const containerRef = useRef(null);
+    const mapRef = useRef(null);
+    const markerRef = useRef(null);
+
+    useEffect(() => {
+        if (!document.getElementById('leaflet-css')) {
+            const link = document.createElement('link');
+            link.id = 'leaflet-css';
+            link.rel = 'stylesheet';
+            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            document.head.appendChild(link);
+        }
+
+        const initMap = () => {
+            if (!containerRef.current || mapRef.current) return;
+            const L = window.L;
+            const initLat = parseFloat(lat) || 41.2995;
+            const initLng = parseFloat(lng) || 69.2401;
+
+            const map = L.map(containerRef.current).setView([initLat, initLng], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+            }).addTo(map);
+
+            const marker = L.marker([initLat, initLng], { draggable: true }).addTo(map);
+
+            const updateCoords = (latlng) => {
+                onChange(latlng.lat.toFixed(6), latlng.lng.toFixed(6));
+            };
+
+            marker.on('dragend', e => updateCoords(e.target.getLatLng()));
+            map.on('click', e => {
+                marker.setLatLng(e.latlng);
+                updateCoords(e.latlng);
+            });
+
+            mapRef.current = map;
+            markerRef.current = marker;
+        };
+
+        if (window.L) {
+            initMap();
+        } else {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            script.onload = initMap;
+            document.head.appendChild(script);
+        }
+
+        return () => {
+            if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; markerRef.current = null; }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!markerRef.current || !mapRef.current) return;
+        const numLat = parseFloat(lat);
+        const numLng = parseFloat(lng);
+        if (!isNaN(numLat) && !isNaN(numLng) && numLat !== 0 && numLng !== 0) {
+            markerRef.current.setLatLng([numLat, numLng]);
+            mapRef.current.setView([numLat, numLng]);
+        }
+    }, [lat, lng]);
+
+    return (
+        <div style={{ gridColumn: 'span 2' }}>
+            <label className="form-label" style={{ marginBottom: 8 }}>
+                📍 Xaritadan tanlash
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400, marginLeft: 8 }}>
+                    (xaritaga bosing yoki marker torting)
+                </span>
+            </label>
+            <div ref={containerRef} style={{
+                width: '100%', height: 260, borderRadius: 12,
+                border: '1px solid var(--border)', overflow: 'hidden',
+                background: 'var(--bg-secondary)',
+            }} />
+        </div>
+    );
+}
 
 export default function BranchesList() {
     const [branches, setBranches] = useState([]);
@@ -26,7 +108,13 @@ export default function BranchesList() {
         if (!form.number || !form.address) { alert('Raqam va manzil kerak'); return; }
         setSaving(true);
         try {
-            const payload = { ...form, number: parseInt(form.number), deliveryRadius: parseFloat(form.deliveryRadius) || 5, minOrderAmount: parseInt(form.minOrderAmount) || 30000, location: { lat: parseFloat(form.location.lat) || 0, lng: parseFloat(form.location.lng) || 0 } };
+            const payload = {
+                ...form,
+                number: parseInt(form.number),
+                deliveryRadius: parseFloat(form.deliveryRadius) || 5,
+                minOrderAmount: parseInt(form.minOrderAmount) || 30000,
+                location: { lat: parseFloat(form.location.lat) || 0, lng: parseFloat(form.location.lng) || 0 },
+            };
             if (modal === 'add') {
                 await api.post('/branches', payload);
             } else {
@@ -110,7 +198,7 @@ export default function BranchesList() {
 
             {modal && (
                 <div className="modal-overlay" onClick={() => setModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}>
                         <div className="modal-header">
                             <span className="modal-title">{modal === 'add' ? '+ Yangi filial' : `✏️ Filial #${form.number}`}</span>
                             <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
@@ -144,14 +232,24 @@ export default function BranchesList() {
                                 <label className="form-label">Yetkazish radiusi (km)</label>
                                 <input className="form-input" type="number" value={form.deliveryRadius} onChange={e => setField('deliveryRadius', e.target.value)} />
                             </div>
+
+                            {/* Map */}
+                            <MapPicker
+                                lat={form.location?.lat}
+                                lng={form.location?.lng}
+                                onChange={(lat, lng) => setForm(f => ({ ...f, location: { lat, lng } }))}
+                            />
+
+                            {/* Coordinates (auto-filled from map) */}
                             <div className="form-group">
                                 <label className="form-label">Kenglik (lat)</label>
-                                <input className="form-input" type="number" step="0.0001" value={form.location?.lat} onChange={e => setLoc('lat', e.target.value)} placeholder="41.2995" />
+                                <input className="form-input" type="number" step="0.000001" value={form.location?.lat} onChange={e => setLoc('lat', e.target.value)} placeholder="41.299500" />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Uzunlik (lng)</label>
-                                <input className="form-input" type="number" step="0.0001" value={form.location?.lng} onChange={e => setLoc('lng', e.target.value)} placeholder="69.2401" />
+                                <input className="form-input" type="number" step="0.000001" value={form.location?.lng} onChange={e => setLoc('lng', e.target.value)} placeholder="69.240100" />
                             </div>
+
                             <div style={{ gridColumn: 'span 2', display: 'flex', gap: 24 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                                     <input type="checkbox" checked={form.isOpen} onChange={e => setField('isOpen', e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
