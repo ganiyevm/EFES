@@ -35,14 +35,15 @@ export default function Sidebar() {
                 background: 'linear-gradient(180deg, rgba(212,160,23,0.06) 0%, transparent 100%)',
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                        width: 44, height: 44, borderRadius: 14,
-                        background: 'linear-gradient(135deg, var(--primary), var(--primary-strong))',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 22, boxShadow: '0 4px 16px rgba(212,160,23,0.3)',
-                    }}>
-                        🔥
-                    </div>
+                    <img
+                        src="/logo/efes_logo.jpg"
+                        alt="EFES"
+                        style={{
+                            width: 44, height: 44, borderRadius: 14,
+                            objectFit: 'cover', flexShrink: 0,
+                            boxShadow: '0 4px 16px rgba(212,160,23,0.3)',
+                        }}
+                    />
                     <div>
                         <div style={{
                             fontWeight: 900, fontSize: 19, letterSpacing: -0.5,
