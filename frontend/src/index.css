@@ -27,6 +27,20 @@
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+[data-theme="light"] {
+    --bg: #F5F2ED;
+    --bg-card: #FFFFFF;
+    --bg-secondary: #EDE9E3;
+    --bg-glass: rgba(255,255,255,0.85);
+    --text: #1A1A1A;
+    --text-secondary: #666666;
+    --border: rgba(212, 160, 23, 0.18);
+    --border-hover: rgba(212, 160, 23, 0.4);
+    --glow: rgba(212, 160, 23, 0.1);
+    --glow-strong: rgba(212, 160, 23, 0.25);
+    --shadow: 0 4px 24px rgba(0,0,0,0.1);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {

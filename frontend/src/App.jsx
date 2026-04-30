@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
@@ -13,6 +13,11 @@ import Branches from './pages/Branches';
 import Profile from './pages/Profile';
 import Orders from './pages/Orders';
 import Onboarding from './pages/Onboarding';
+import Promotions from './pages/Promotions';
+
+// Saqlangan mavzu (theme) ni boshlang'ich holatda qo'llash
+const savedTheme = localStorage.getItem('efes_theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
 
 // AuthContext ga kirish uchun alohida inner komponent
 function AppInner() {
@@ -60,6 +65,7 @@ function AppInner() {
                     <Route path="/branches" element={<Branches />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/orders" element={<Orders />} />
+                    <Route path="/promotions" element={<Promotions />} />
                     <Route path="/onboarding" element={<Navigate to="/" replace />} />
                 </Routes>
             </BrowserRouter>
