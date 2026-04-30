@@ -9,7 +9,7 @@ const TelegramService = require('../services/telegram.service');
 const CourierBotService = require('../services/courierBot.service');
 const OrderStatusService = require('../services/orderStatus.service');
 const bcrypt = require('bcryptjs');
-const { authAdmin } = require('../middleware/auth');
+const { authAdmin, authSuperAdmin } = require('../middleware/auth');
 
 // ─── Login (ochiq route — authAdmin dan oldin) ───
 router.post('/login', async (req, res) => {
@@ -322,8 +322,8 @@ router.patch('/users/:id/block', async (req, res) => {
     }
 });
 
-// ─── Foydalanuvchini o'chirish ───
-router.delete('/users/:id', async (req, res) => {
+// ─── Foydalanuvchini o'chirish (faqat super_admin) ───
+router.delete('/users/:id', authSuperAdmin, async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
@@ -352,14 +352,32 @@ router.get('/accounts', async (req, res) => {
     }
 });
 
-router.post('/accounts', async (req, res) => {
+router.post('/accounts', authSuperAdmin, async (req, res) => {
     try {
         const { username, password, role } = req.body;
+        // faqat super_admin boshqa super_admin yarata oladi
+        if (role === 'super_admin' && req.admin.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Super admin faqat super admin tomonidan yaratilishi mumkin' });
+        }
         const hashed = await bcrypt.hash(password, 10);
         const account = await AdminAccount.create({ username, password: hashed, role });
         res.status(201).json({ id: account._id, username, role });
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+
+router.delete('/accounts/:id', authSuperAdmin, async (req, res) => {
+    try {
+        const account = await AdminAccount.findById(req.params.id);
+        if (!account) return res.status(404).json({ error: 'Admin topilmadi' });
+        if (String(account._id) === String(req.admin.adminId)) {
+            return res.status(400).json({ error: "O'z akkauntingizni o'chirib bo'lmaydi" });
+        }
+        await AdminAccount.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
 
 export default function UsersList() {
+    const isSuperAdmin = localStorage.getItem('efes_admin_role') === 'super_admin';
     const [users, setUsers] = useState([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -110,14 +111,16 @@ export default function UsersList() {
                                                 >
                                                     {u.isBlocked ? '✅ Ochish' : '🚫 Bloklash'}
                                                 </button>
-                                                <button
-                                                    className="btn btn-sm"
-                                                    style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
-                                                    onClick={() => handleDelete(u)}
-                                                    title="O'chirish"
-                                                >
-                                                    🗑
-                                                </button>
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
+                                                        onClick={() => handleDelete(u)}
+                                                        title="O'chirish"
+                                                    >
+                                                        🗑
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

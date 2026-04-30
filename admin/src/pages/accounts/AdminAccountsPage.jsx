@@ -4,6 +4,7 @@ import api from '../../api/axios';
 const EMPTY = { username: '', password: '', role: 'admin' };
 
 export default function AdminAccountsPage() {
+    const isSuperAdmin = localStorage.getItem('efes_admin_role') === 'super_admin';
     const [accounts, setAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
@@ -78,21 +79,23 @@ export default function AdminAccountsPage() {
                                             </div>
                                         </td>
                                         <td>
-                                            <span className={`badge ${a.role === 'admin' ? 'badge-primary' : 'badge-info'}`}>
-                                                {a.role === 'admin' ? '👑 Admin' : '📊 Manager'}
+                                            <span className={`badge ${a.role === 'super_admin' ? 'badge-danger' : a.role === 'admin' ? 'badge-primary' : 'badge-info'}`}>
+                                                {a.role === 'super_admin' ? '🔑 Super Admin' : a.role === 'admin' ? '👑 Admin' : '📊 Manager'}
                                             </span>
                                         </td>
                                         <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                             {new Date(a.createdAt).toLocaleDateString()}
                                         </td>
                                         <td>
-                                            <button
-                                                className="btn btn-sm"
-                                                style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
-                                                onClick={() => handleDelete(a._id, a.username)}
-                                            >
-                                                🗑 O'chirish
-                                            </button>
+                                            {isSuperAdmin && (
+                                                <button
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
+                                                    onClick={() => handleDelete(a._id, a.username)}
+                                                >
+                                                    🗑 O'chirish
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -121,6 +124,7 @@ export default function AdminAccountsPage() {
                             <div className="form-group">
                                 <label className="form-label">Rol</label>
                                 <select className="form-input" value={form.role} onChange={e => setField('role', e.target.value)}>
+                                    {isSuperAdmin && <option value="super_admin">🔑 Super Admin</option>}
                                     <option value="admin">👑 Admin</option>
                                     <option value="manager">📊 Manager</option>
                                 </select>

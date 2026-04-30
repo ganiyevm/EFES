@@ -29,4 +29,11 @@ const authAdmin = (req, res, next) => {
     }
 };
 
-module.exports = { authTelegram, authAdmin };
+const authSuperAdmin = (req, res, next) => {
+    if (req.admin?.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Faqat super admin uchun ruxsat' });
+    }
+    next();
+};
+
+module.exports = { authTelegram, authAdmin, authSuperAdmin };
