@@ -2,14 +2,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 
-const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'efes_kebab_bot';
-
 export default function Onboarding() {
     const { setUser } = useAuth();
 
     const [step, setStep] = useState('phone'); // 'phone' | 'otp'
     const [phone, setPhone] = useState('+998');
     const [code, setCode] = useState('');
+    const [via, setVia] = useState('sms'); // 'sms' | 'telegram'
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [cooldown, setCooldown] = useState(0);
@@ -28,14 +27,19 @@ export default function Onboarding() {
 
     const isPhoneValid = phone.replace(/\D/g, '').length >= 12;
 
+    const sendOtp = async () => {
+        const { data } = await api.post('/auth/send-otp', { phone });
+        setVia(data.via || 'sms');
+        setCooldown(60);
+    };
+
     const handleSend = async () => {
         if (!isPhoneValid) { setError("Telefon raqamni to'liq kiriting"); return; }
         setError('');
         setLoading(true);
         try {
-            await api.post('/auth/send-otp', { phone });
+            await sendOtp();
             setStep('otp');
-            setCooldown(60);
         } catch (e) {
             setError(e.response?.data?.error || 'Xato yuz berdi');
         } finally {
@@ -51,7 +55,6 @@ export default function Onboarding() {
             const { data } = await api.post('/auth/verify-otp', { phone, code });
             if (data.token) localStorage.setItem('efes_token', data.token);
             setUser(data.user);
-            // isProfileComplete = true bo'lgandan keyin App.jsx asosiy routega o'tadi
         } catch (e) {
             setError(e.response?.data?.error || "Kod noto'g'ri");
         } finally {
@@ -65,14 +68,15 @@ export default function Onboarding() {
         setCode('');
         setLoading(true);
         try {
-            await api.post('/auth/send-otp', { phone });
-            setCooldown(60);
+            await sendOtp();
         } catch (e) {
             setError(e.response?.data?.error || 'Xato yuz berdi');
         } finally {
             setLoading(false);
         }
     };
+
+    const isSms = via === 'sms';
 
     return (
         <div style={{
@@ -92,7 +96,7 @@ export default function Onboarding() {
                 }}>🍽</div>
                 <div style={{ fontWeight: 900, fontSize: 22 }}>EFES Kebab</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>
-                    {step === 'phone' ? 'Telefon raqamingizni tasdiqlang' : 'Telegram botdagi kodni kiriting'}
+                    {step === 'phone' ? 'Telefon raqamingizni tasdiqlang' : `Kod ${isSms ? 'SMS' : 'Telegram'}ga yuborildi`}
                 </div>
             </div>
 
@@ -117,8 +121,7 @@ export default function Onboarding() {
                 {step === 'phone' && (
                     <>
                         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                            Telegram bot orqali tasdiqlash kodi yuboriladi.
-                            Bot bilan suhbat ochiq bo'lishi kerak.
+                            Telefon raqamingizga SMS tasdiqlash kodi yuboriladi.
                         </div>
 
                         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
@@ -136,30 +139,12 @@ export default function Onboarding() {
 
                         {error && <div style={{ color: '#e74c3c', fontSize: 12, marginBottom: 10 }}>{error}</div>}
 
-                        {/* Bot ochish eslatmasi */}
-                        <a
-                            href={`https://t.me/${BOT_USERNAME}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                padding: '11px 14px', marginBottom: 14,
-                                background: 'rgba(0,136,204,0.08)',
-                                border: '1px solid rgba(0,136,204,0.18)',
-                                borderRadius: 13, color: '#0088cc',
-                                fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                            }}
-                        >
-                            <span style={{ fontSize: 18 }}>✈️</span>
-                            <span>Avval botni oching: <b>@{BOT_USERNAME}</b></span>
-                        </a>
-
                         <button
                             onClick={handleSend}
                             disabled={loading || !isPhoneValid}
                             style={primaryBtn(loading || !isPhoneValid)}
                         >
-                            {loading ? '⏳ Yuborilmoqda...' : '📨 Telegram orqali kod olish'}
+                            {loading ? '⏳ Yuborilmoqda...' : '📩 SMS orqali kod olish'}
                         </button>
                     </>
                 )}
@@ -167,32 +152,15 @@ export default function Onboarding() {
                 {step === 'otp' && (
                     <>
                         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                            <div style={{ fontSize: 44, marginBottom: 12 }}>✈️</div>
+                            <div style={{ fontSize: 44, marginBottom: 12 }}>{isSms ? '📱' : '✈️'}</div>
                             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
-                                Kod Telegramga yuborildi
+                                Kod {isSms ? 'SMS' : 'Telegram bot'}ga yuborildi
                             </div>
                             <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
-                                <b style={{ color: 'var(--text)' }}>@{BOT_USERNAME}</b> botini oching,<br />
-                                u yerdan 6 xonali kodni kiriting
+                                <b style={{ color: 'var(--text)' }}>{phone}</b> raqamiga<br />
+                                yuborilgan 6 xonali kodni kiriting
                             </div>
                         </div>
-
-                        {/* Bot ochish tugmasi */}
-                        <a
-                            href={`https://t.me/${BOT_USERNAME}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                padding: '12px', marginBottom: 16,
-                                background: 'rgba(0,136,204,0.1)',
-                                border: '1px solid rgba(0,136,204,0.22)',
-                                borderRadius: 13, color: '#0088cc',
-                                fontSize: 14, fontWeight: 700, textDecoration: 'none',
-                            }}
-                        >
-                            ✈️ Botni ochish
-                        </a>
 
                         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
                             6 xonali kod

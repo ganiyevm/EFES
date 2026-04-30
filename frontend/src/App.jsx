@@ -42,7 +42,11 @@ function AppInner() {
         );
     }
 
-    // Asosiy ilova — telefon tasdiqlash checkout da so'raladi
+    // Yangi foydalanuvchi — telefon raqamini tasdiqlashi kerak
+    if (user && !user.isProfileComplete) {
+        return <Onboarding />;
+    }
+
     return (
         <CartProvider>
             <BrowserRouter>
