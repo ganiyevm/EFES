@@ -11,6 +11,7 @@ const DEFAULTS = {
     about_address: 'Toshkent shahri, Yunusobod tumani',
     about_work_hours: 'Har kuni 10:00 – 23:00',
     jobs_positions: ['Oshpaz', 'Ofitsiant', 'Kassir', 'Yetkazib beruvchi'],
+    reviews: [],
     delivery_time: '30–60 daqiqa ichida',
     delivery_cost_text: '15 000 so\'mdan',
     delivery_free_text: '150 000 so\'mdan yuqori buyurtmalarda',
@@ -228,7 +229,7 @@ export default function SideMenu({ onClose, onLangOpen }) {
                     <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
                         {content.about_description}
                     </p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-secondary)' }}>
                             <span>📍</span> {content.about_address}
                         </div>
@@ -239,6 +240,27 @@ export default function SideMenu({ onClose, onLangOpen }) {
                             <span>📞</span> {content.phone}
                         </div>
                     </div>
+                    {(content.reviews || []).length > 0 && (
+                        <div>
+                            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Mijozlar sharhlari</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {(content.reviews || []).map((rv, i) => (
+                                    <div key={i} style={{
+                                        padding: '12px 14px', background: 'var(--bg-secondary)',
+                                        borderRadius: 14, border: '1px solid var(--border)',
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                            <div style={{ fontWeight: 700, fontSize: 14 }}>{rv.name}</div>
+                                            <div style={{ color: '#f5a623', fontSize: 13 }}>
+                                                {'★'.repeat(rv.stars)}{'☆'.repeat(5 - rv.stars)}
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.55 }}>{rv.text}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </InfoModal>
             )}
 

@@ -13,6 +13,7 @@ const APP_CONTENT_DEFAULT = {
     about_address: 'Toshkent shahri, Yunusobod tumani',
     about_work_hours: 'Har kuni 10:00 – 23:00',
     jobs_positions: ['Oshpaz', 'Ofitsiant', 'Kassir', 'Yetkazib beruvchi', 'Tozalovchi'],
+    reviews: [],
     delivery_time: '30–60 daqiqa ichida',
     delivery_cost_text: '15 000 so\'mdan',
     delivery_free_text: '150 000 so\'mdan yuqori buyurtmalarda',

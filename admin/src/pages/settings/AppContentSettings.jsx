@@ -5,8 +5,11 @@ const TABS = [
     { key: 'contact', label: '📞 Aloqa' },
     { key: 'about', label: 'ℹ️ Biz haqimizda' },
     { key: 'jobs', label: '💼 Ish o\'rinlari' },
+    { key: 'reviews', label: '⭐ Sharhlar' },
     { key: 'delivery', label: '🚗 Yetkazib berish' },
 ];
+
+const EMPTY_REVIEW = { name: '', stars: 5, text: '' };
 
 export default function AppContentSettings() {
     const [tab, setTab] = useState('contact');
@@ -15,11 +18,12 @@ export default function AppContentSettings() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [newJob, setNewJob] = useState('');
+    const [newReview, setNewReview] = useState(EMPTY_REVIEW);
 
     useEffect(() => {
         api.get('/delivery/app-content/admin')
             .then(r => setData(r.data))
-            .catch(() => {})
+            .catch(err => alert('Ma\'lumot yuklanmadi: ' + (err.response?.data?.error || err.message)))
             .finally(() => setLoading(false));
     }, []);
 
@@ -38,17 +42,27 @@ export default function AppContentSettings() {
         }
     };
 
+    // Jobs
     const addJob = () => {
-        if (!newJob.trim()) return;
-        set('jobs_positions', [...(data.jobs_positions || []), newJob.trim()]);
+        const trimmed = newJob.trim();
+        if (!trimmed) return;
+        set('jobs_positions', [...(data?.jobs_positions || []), trimmed]);
         setNewJob('');
     };
-    const removeJob = (i) => set('jobs_positions', data.jobs_positions.filter((_, idx) => idx !== i));
+    const removeJob = (i) => set('jobs_positions', (data.jobs_positions || []).filter((_, idx) => idx !== i));
 
-    if (loading) return <div style={{ textAlign: 'center', padding: 40 }}>⏳</div>;
+    // Reviews
+    const addReview = () => {
+        if (!newReview.name.trim() || !newReview.text.trim()) return;
+        set('reviews', [...(data?.reviews || []), { ...newReview, name: newReview.name.trim(), text: newReview.text.trim() }]);
+        setNewReview(EMPTY_REVIEW);
+    };
+    const removeReview = (i) => set('reviews', (data.reviews || []).filter((_, idx) => idx !== i));
+
+    if (loading || !data) return <div style={{ textAlign: 'center', padding: 40 }}>⏳</div>;
 
     return (
-        <div style={{ maxWidth: 680 }}>
+        <div style={{ maxWidth: 720 }}>
             <div className="page-header">
                 <h1 className="page-title">📱 Ilova kontenti</h1>
                 <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
@@ -120,8 +134,13 @@ export default function AppContentSettings() {
                 {tab === 'jobs' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         <div className="form-group">
-                            <label className="form-label">Vakansiyalar ro'yxati</label>
+                            <label className="form-label">Vakansiyalar ro'yxati ({(data.jobs_positions || []).length} ta)</label>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                                {(data.jobs_positions || []).length === 0 && (
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: 13, padding: '10px 0' }}>
+                                        Hali vakansiya yo'q. Quyidan qo'shing.
+                                    </div>
+                                )}
                                 {(data.jobs_positions || []).map((job, i) => (
                                     <div key={i} style={{
                                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -137,10 +156,110 @@ export default function AppContentSettings() {
                                 ))}
                             </div>
                             <div style={{ display: 'flex', gap: 8 }}>
-                                <input className="form-input" value={newJob} onChange={e => setNewJob(e.target.value)}
-                                    placeholder="Yangi vakansiya..." style={{ flex: 1 }}
-                                    onKeyDown={e => e.key === 'Enter' && addJob()} />
-                                <button className="btn btn-primary" onClick={addJob}>+ Qo'shish</button>
+                                <input
+                                    className="form-input"
+                                    value={newJob}
+                                    onChange={e => setNewJob(e.target.value)}
+                                    placeholder="Yangi vakansiya nomini kiriting..."
+                                    style={{ flex: 1 }}
+                                    onKeyDown={e => e.key === 'Enter' && addJob()}
+                                />
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={addJob}
+                                    disabled={!newJob.trim()}
+                                    style={{ whiteSpace: 'nowrap' }}
+                                >
+                                    + Qo'shish
+                                </button>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                Qo'shgandan keyin "💾 Saqlash" tugmasini bosing
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Sharhlar ── */}
+                {tab === 'reviews' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                        {/* Existing reviews */}
+                        <div>
+                            <label className="form-label">Mijozlar sharhlari ({(data.reviews || []).length} ta)</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                                {(data.reviews || []).length === 0 && (
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: 13, padding: '10px 0' }}>
+                                        Hali sharh yo'q. Quyidan qo'shing.
+                                    </div>
+                                )}
+                                {(data.reviews || []).map((rv, i) => (
+                                    <div key={i} style={{
+                                        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+                                        padding: '12px 14px', background: 'var(--bg-secondary)',
+                                        borderRadius: 12, border: '1px solid var(--border)',
+                                    }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 700, fontSize: 14 }}>{rv.name}</div>
+                                            <div style={{ color: '#f5a623', fontSize: 14, margin: '3px 0' }}>
+                                                {'★'.repeat(rv.stars)}{'☆'.repeat(5 - rv.stars)}
+                                            </div>
+                                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{rv.text}</div>
+                                        </div>
+                                        <button onClick={() => removeReview(i)} style={{
+                                            background: 'rgba(231,76,60,0.1)', border: 'none', borderRadius: 8,
+                                            color: 'var(--danger)', cursor: 'pointer', padding: '4px 10px', fontSize: 13, flexShrink: 0,
+                                        }}>🗑</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Add new review */}
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                            <label className="form-label">Yangi sharh qo'shish</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                                <div style={{ display: 'flex', gap: 10 }}>
+                                    <div style={{ flex: 1 }}>
+                                        <input
+                                            className="form-input"
+                                            value={newReview.name}
+                                            onChange={e => setNewReview(r => ({ ...r, name: e.target.value }))}
+                                            placeholder="Ism (masalan: Aziz T.)"
+                                        />
+                                    </div>
+                                    <div style={{ width: 120 }}>
+                                        <select
+                                            className="form-input"
+                                            value={newReview.stars}
+                                            onChange={e => setNewReview(r => ({ ...r, stars: Number(e.target.value) }))}
+                                        >
+                                            <option value={5}>⭐⭐⭐⭐⭐ 5</option>
+                                            <option value={4}>⭐⭐⭐⭐ 4</option>
+                                            <option value={3}>⭐⭐⭐ 3</option>
+                                            <option value={2}>⭐⭐ 2</option>
+                                            <option value={1}>⭐ 1</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <textarea
+                                    className="form-input"
+                                    rows={3}
+                                    value={newReview.text}
+                                    onChange={e => setNewReview(r => ({ ...r, text: e.target.value }))}
+                                    placeholder="Sharh matni (masalan: Juda mazali taomlar, tez yetkazib berishdi!)"
+                                    style={{ resize: 'vertical' }}
+                                />
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={addReview}
+                                    disabled={!newReview.name.trim() || !newReview.text.trim()}
+                                    style={{ alignSelf: 'flex-start' }}
+                                >
+                                    + Sharh qo'shish
+                                </button>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>
+                                Qo'shgandan keyin "💾 Saqlash" tugmasini bosing
                             </div>
                         </div>
                     </div>
