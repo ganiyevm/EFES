@@ -58,16 +58,19 @@ export default function ProductDetail() {
                     style={{
                         position: 'absolute', top: 16, left: 16,
                         background: 'rgba(13,13,20,0.75)', border: '1.5px solid rgba(255,255,255,0.18)',
-                        borderRadius: 16, height: 48, paddingLeft: 14, paddingRight: 18,
+                        borderRadius: 16, height: 48, paddingLeft: 12, paddingRight: 18,
                         color: '#fff', fontSize: 15, fontWeight: 700,
                         cursor: 'pointer', backdropFilter: 'blur(12px)',
-                        display: 'flex', alignItems: 'center', gap: 8,
+                        display: 'flex', alignItems: 'center', gap: 6,
                         boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
                         fontFamily: 'inherit',
                     }}
                 >
-                    <span style={{ fontSize: 20, lineHeight: 1 }}>←</span>
-                    <span>{t('back')}</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 12H5M12 5l-7 7 7 7" />
+                    </svg>
+                    <span>Orqaga</span>
                 </button>
 
                 {/* Badges */}
