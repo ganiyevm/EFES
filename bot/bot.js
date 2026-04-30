@@ -404,7 +404,9 @@ async function handleCallback(callback) {
             changedBy: 'operator',
             note: `Operator tomonidan tasdiqlandi (tg: ${from.id})`,
         });
-        await answerCb(id, '✅ Tasdiqlandi!');
+
+        // Popup alert — operatorda dialog ko'rinadi
+        await answerCb(id, `✅ ${order.orderNumber} tasdiqlandi!`, true);
 
         if (chatId && messageId) {
             await editMessage(
@@ -413,6 +415,13 @@ async function handleCallback(callback) {
                 (message.text || '') + `\n\n✅ <b>Tasdiqlandi</b> — ${from.first_name}`,
             );
         }
+
+        // Operator uchun signal xabar
+        await sendMessage(chatId,
+            `✅ <b>${order.orderNumber}</b> tasdiqlandi!\n` +
+            `👨‍🍳 Oshxona tayyorlashni boshlaydi.\n` +
+            `💰 ${order.total.toLocaleString()} so'm · ${order.deliveryType === 'delivery' ? '🚗 Yetkazib berish' : '🏃 Olib ketish'}`
+        );
 
         TelegramService.notifyCustomerStatus(order).catch(() => {});
         CourierBotService.broadcastNewOrder(order).catch(e => console.error('Courier broadcast:', e.message));
@@ -443,7 +452,8 @@ async function handleCallback(callback) {
             changedBy: 'operator',
             note: `Operator tomonidan rad etildi (tg: ${from.id})`,
         });
-        await answerCb(id, '❌ Rad etildi');
+
+        await answerCb(id, `❌ ${order.orderNumber} rad etildi`, true);
 
         if (chatId && messageId) {
             await editMessage(
@@ -452,6 +462,12 @@ async function handleCallback(callback) {
                 (message.text || '') + `\n\n❌ <b>Rad etildi</b> — ${from.first_name}`,
             );
         }
+
+        // Operator uchun signal xabar
+        await sendMessage(chatId,
+            `❌ <b>${order.orderNumber}</b> rad etildi.\n` +
+            `Mijozga xabar yuborildi.`
+        );
 
         TelegramService.notifyCustomerStatus(order, { note: 'Operator bilan bog\'laning.' }).catch(() => {});
 

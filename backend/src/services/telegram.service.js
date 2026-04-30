@@ -106,14 +106,28 @@ class TelegramService {
             && typeof order.addressLat === 'number'
             && typeof order.addressLng === 'number';
 
-        const text = `🍽 <b>Yangi buyurtma!</b>\n\n` +
+        const deliveryLine = order.deliveryType === 'delivery'
+            ? `🚗 Yetkazib berish: ${order.address || '—'}`
+            : '🏃 Olib ketish';
+
+        // ── 1. Signal: diqqatni tortadigan qisqa xabar ──────────────────
+        const signalText =
+            `🔔🔔🔔 <b>YANGI BUYURTMA!</b> 🔔🔔🔔\n\n` +
+            `📋 <b>${order.orderNumber}</b>\n` +
+            `💰 <b>${order.total.toLocaleString()} so'm</b> · ` +
+            `${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}\n` +
+            `${deliveryLine}\n\n` +
+            `⬇️ Quyida batafsil ma'lumot ⬇️`;
+
+        // ── 2. To'liq buyurtma xabari ────────────────────────────────────
+        const detailText =
             `📋 <b>${order.orderNumber}</b>\n` +
             `👤 ${order.customerName}\n` +
             `📞 ${order.phone}\n\n` +
             `🍽 <b>Taomlar:</b>\n${items}\n\n` +
             `💰 Jami: <b>${order.total.toLocaleString()} so'm</b>\n` +
             `💳 To'lov: ${PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod}\n` +
-            `🚗 ${order.deliveryType === 'delivery' ? `Yetkazib berish: ${order.address}` : 'Olib ketish'}\n` +
+            `${deliveryLine}\n` +
             `${order.notes ? `📝 Izoh: ${order.notes}` : ''}`;
 
         const buttons = [[
@@ -128,9 +142,14 @@ class TelegramService {
         }
 
         try {
-            await this.sendMessage(branch.operatorChatId, text, {
+            // Signal xabari (ovozli notification uchun alohida)
+            await this.sendMessage(branch.operatorChatId, signalText);
+
+            // To'liq buyurtma xabari + tugmalar
+            await this.sendMessage(branch.operatorChatId, detailText, {
                 reply_markup: { inline_keyboard: buttons },
             });
+
             if (hasGeo) {
                 await this.sendLocation(branch.operatorChatId, order.addressLat, order.addressLng);
             }
