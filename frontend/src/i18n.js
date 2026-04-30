@@ -164,6 +164,12 @@ const translations = {
         promoValidating: 'Tekshirilmoqda...',
         allPromos: 'Barcha aksiyalar',
 
+        // ── Cart toast ─────────────────────────────────────────────────────
+        addedToCart: "Savatga qo'shildi",
+        addMoreQuestion: "Yana nima qo'shasiz?",
+        goToCart: "Savatga o'tish",
+        continueChoosing: "Davom etish",
+
         // ── Common ─────────────────────────────────────────────────────────
         loading: 'Yuklanmoqda...', back: '←', close: 'Yopish',
         save: 'Saqlash', cancel: 'Bekor qilish',
@@ -334,6 +340,12 @@ const translations = {
         promoValidating: 'Проверяем...',
         allPromos: 'Все акции',
 
+        // ── Cart toast ─────────────────────────────────────────────────────
+        addedToCart: 'Добавлено в корзину',
+        addMoreQuestion: 'Хотите добавить ещё?',
+        goToCart: 'Перейти в корзину',
+        continueChoosing: 'Продолжить',
+
         // ── Common ─────────────────────────────────────────────────────────
         loading: 'Загрузка...', back: '←', close: 'Закрыть',
         save: 'Сохранить', cancel: 'Отмена',
@@ -503,6 +515,12 @@ const translations = {
         promoRemove: '✕ Remove',
         promoValidating: 'Checking...',
         allPromos: 'All promotions',
+
+        // ── Cart toast ─────────────────────────────────────────────────────
+        addedToCart: 'Added to cart',
+        addMoreQuestion: 'Want to add more?',
+        goToCart: 'Go to cart',
+        continueChoosing: 'Continue',
 
         // ── Common ─────────────────────────────────────────────────────────
         loading: 'Loading...', back: '←', close: 'Close',

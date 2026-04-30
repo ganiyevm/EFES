@@ -1,10 +1,65 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useT } from '../i18n';
 import api from '../api';
 import BottomNav from '../components/BottomNav';
 import { getProductImage } from '../utils/productImage';
+
+function CartToast({ product, onClose, onGoCart, t }) {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 4000);
+        return () => clearTimeout(timer);
+    }, [product]);
+
+    if (!product) return null;
+    return (
+        <div style={{
+            position: 'fixed', bottom: 80, left: 12, right: 12, zIndex: 500,
+            background: '#1a1a24', borderRadius: 18, padding: '14px 16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+            display: 'flex', alignItems: 'center', gap: 12,
+            animation: 'slideUpToast 0.3s ease',
+        }}>
+            <style>{`@keyframes slideUpToast { from { transform:translateY(20px); opacity:0 } to { transform:translateY(0); opacity:1 } }`}</style>
+            <div style={{
+                width: 40, height: 40, borderRadius: 12, flexShrink: 0, overflow: 'hidden',
+                background: 'rgba(212,160,23,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+            }}>
+                {product.image
+                    ? <img src={product.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : '🍽'
+                }
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#f5a623', fontWeight: 700, fontSize: 12, marginBottom: 2 }}>
+                    ✅ {t('addedToCart')}
+                </div>
+                <div style={{ color: '#fff', fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {product.name}
+                </div>
+                <div style={{ color: '#aaa', fontSize: 11, marginTop: 2 }}>{t('addMoreQuestion')}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                <button onClick={onGoCart} style={{
+                    background: 'linear-gradient(135deg, #D4A017, #F0C040)',
+                    border: 'none', borderRadius: 10, color: '#1a1a24',
+                    fontSize: 11, fontWeight: 800, padding: '6px 10px', cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                }}>
+                    {t('goToCart')} →
+                </button>
+                <button onClick={onClose} style={{
+                    background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 10,
+                    color: '#ccc', fontSize: 11, fontWeight: 600, padding: '6px 10px', cursor: 'pointer',
+                }}>
+                    {t('continueChoosing')}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 const CATS = [
     { key: 'all', icon: '🍽' },
@@ -28,9 +83,15 @@ export default function Menu() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [category, setCategory] = useState(params.get('category') || 'all');
+    const [toastProduct, setToastProduct] = useState(null);
     const debounce = useRef(null);
 
     const inCartMap = Object.fromEntries(items.map(i => [i.productId, i.qty]));
+
+    const handleAddItem = useCallback((p) => {
+        addItem(p);
+        setToastProduct(p);
+    }, [addItem]);
 
     const fetchProducts = (q, cat) => {
         setLoading(true);
@@ -151,7 +212,7 @@ export default function Menu() {
                                 product={p}
                                 inCart={inCartMap[p._id] || 0}
                                 onPress={() => navigate(`/product/${p._id}`)}
-                                onAdd={() => addItem(p)}
+                                onAdd={() => handleAddItem(p)}
                             />
                         ))}
                     </div>
@@ -159,6 +220,13 @@ export default function Menu() {
             </div>
 
             <BottomNav />
+
+            <CartToast
+                product={toastProduct}
+                onClose={() => setToastProduct(null)}
+                onGoCart={() => { setToastProduct(null); navigate('/cart'); }}
+                t={t}
+            />
         </div>
     );
 }

@@ -55,7 +55,7 @@ export default function Cart() {
 
     // Delivery time
     const [deliveryDate, setDeliveryDate] = useState(todayStr());
-    const [deliveryTime, setDeliveryTime] = useState('');
+    const [deliveryTime, setDeliveryTime] = useState(defaultDeliveryTime);
 
     // Contact
     const [extraPhone, setExtraPhone] = useState('+998');
@@ -621,6 +621,12 @@ export default function Cart() {
 
 function todayStr() {
     return new Date().toISOString().split('T')[0];
+}
+
+function defaultDeliveryTime() {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 30);
+    return d.toTimeString().slice(0, 5);
 }
 
 function Section({ title, children }) {
