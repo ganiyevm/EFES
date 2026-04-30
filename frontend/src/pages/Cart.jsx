@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,15 @@ import MapModal from '../components/MapModal';
 import { PaymentIcon } from '../components/BrandIcon';
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'efes_kebab_bot';
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const PAY_METHODS = [
     { key: 'payme', label: 'Payme' },
@@ -73,6 +82,16 @@ export default function Cart() {
     const [submitting, setSubmitting] = useState(false);
     const [showPhoneModal, setShowPhoneModal] = useState(false);
 
+    // Delivery radius check
+    const radiusStatus = useMemo(() => {
+        if (deliveryType !== 'delivery' || !coords || branches.length === 0) return null;
+        const branchId = selectedBranch || branches[0]?._id;
+        const b = branches.find(x => x._id === branchId) || branches[0];
+        if (!b || !b.location?.lat || !b.location?.lng || !b.deliveryRadius) return null;
+        const dist = haversineKm(coords.lat, coords.lng, b.location.lat, b.location.lng);
+        return { dist: parseFloat(dist.toFixed(1)), radius: b.deliveryRadius, ok: dist <= b.deliveryRadius };
+    }, [coords, branches, selectedBranch, deliveryType]);
+
     const totalItems = items.reduce((s, i) => s + i.qty, 0);
     const freeDelivery = deliveryConfig.freeDeliveryThreshold > 0 && totalPrice >= deliveryConfig.freeDeliveryThreshold;
     const deliveryCost = deliveryType === 'delivery' ? (freeDelivery ? 0 : deliveryConfig.deliveryCost) : 0;
@@ -132,6 +151,10 @@ export default function Cart() {
         }
         if (deliveryType === 'pickup' && !selectedBranch) {
             alert(t('branchRequired')); return;
+        }
+        if (radiusStatus && !radiusStatus.ok) {
+            alert(`Manzilingiz yetkazib berish zonasidan tashqarida.\nFilialdan ${radiusStatus.dist} km uzoqda, maksimal radius ${radiusStatus.radius} km.`);
+            return;
         }
 
         // Qo'shimcha telefon validatsiyasi
@@ -314,6 +337,32 @@ export default function Cart() {
                                 {address ? 'O\'zgartirish' : 'Tanlash'}
                             </span>
                         </button>
+
+                        {/* Radius warning */}
+                        {radiusStatus && !radiusStatus.ok && (
+                            <div style={{
+                                padding: '10px 14px', borderRadius: 12, marginBottom: 10,
+                                background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.25)',
+                                color: '#e74c3c', fontSize: 13, fontWeight: 600,
+                                display: 'flex', alignItems: 'center', gap: 8,
+                            }}>
+                                <span>⚠️</span>
+                                <span>
+                                    Manzil yetkazib berish zonasidan tashqarida ({radiusStatus.dist} km / {radiusStatus.radius} km radius)
+                                </span>
+                            </div>
+                        )}
+                        {radiusStatus && radiusStatus.ok && (
+                            <div style={{
+                                padding: '8px 14px', borderRadius: 12, marginBottom: 10,
+                                background: 'rgba(39,174,96,0.08)', border: '1px solid rgba(39,174,96,0.2)',
+                                color: '#27ae60', fontSize: 13, fontWeight: 600,
+                                display: 'flex', alignItems: 'center', gap: 8,
+                            }}>
+                                <span>✅</span>
+                                <span>Yetkazib berish zonasida ({radiusStatus.dist} km)</span>
+                            </div>
+                        )}
 
                         {/* Address details */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>

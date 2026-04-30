@@ -2,11 +2,21 @@ const router = require('express').Router();
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
+const Branch = require('../models/Branch');
 const Promotion = require('../models/Promotion');
 const BonusService = require('../services/bonus.service');
 const TelegramService = require('../services/telegram.service');
 const { authTelegram } = require('../middleware/auth');
 const { getDeliveryConfig } = require('../utils/deliveryConfig');
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // ─── Yangi buyurtma ───
 router.post('/', authTelegram, async (req, res) => {
@@ -14,6 +24,25 @@ router.post('/', authTelegram, async (req, res) => {
         const { items, branch, deliveryType, address, addressLat, addressLng, paymentMethod, phone, extraPhone, bonusDiscount = 0, notes, promoCode } = req.body;
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+
+        // Yetkazib berish radiusi tekshiruvi
+        if (deliveryType === 'delivery' && addressLat && addressLng) {
+            const branchDoc = await Branch.findById(branch);
+            if (branchDoc && branchDoc.deliveryRadius > 0 &&
+                branchDoc.location?.lat && branchDoc.location?.lng) {
+                const dist = haversineKm(
+                    parseFloat(addressLat), parseFloat(addressLng),
+                    branchDoc.location.lat, branchDoc.location.lng
+                );
+                if (dist > branchDoc.deliveryRadius) {
+                    return res.status(400).json({
+                        error: `Manzilingiz yetkazib berish zonasidan tashqarida. Filialdan ${dist.toFixed(1)} km uzoqda, maksimal radius ${branchDoc.deliveryRadius} km.`,
+                        distanceKm: parseFloat(dist.toFixed(1)),
+                        radiusKm: branchDoc.deliveryRadius,
+                    });
+                }
+            }
+        }
 
         // Mahsulot narxlarini tekshirish
         let subtotal = 0;
