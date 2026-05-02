@@ -27,7 +27,7 @@ router.post('/login', async (req, res) => {
             process.env.ADMIN_JWT_SECRET,
             { expiresIn: '7d' }
         );
-        res.json({ token, username: account.username, role: account.role });
+        res.json({ token, id: account._id, username: account.username, role: account.role });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -118,7 +118,7 @@ router.post('/orders/:id/payme-reconcile', async (req, res) => {
 
         const auditNote = `Payme kabinetidan rekonsilatsiya: txid=${paymeTransId}` +
             (paymeReceiptId ? `, receipt=${paymeReceiptId}` : '') +
-            (req.user?.username ? ` (admin=${req.user.username})` : '') +
+            (req.admin?.username ? ` (admin=${req.admin.username})` : '') +
             (note ? `. ${note}` : '');
 
         order.statusHistory.push({
@@ -364,6 +364,70 @@ router.post('/accounts', authSuperAdmin, async (req, res) => {
         res.status(201).json({ id: account._id, username, role });
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+
+// ─── Rol o'zgartirish ───
+// Agar super_admin mavjud bo'lmasa — istalgan admin o'zini promote qila oladi
+// Agar super_admin mavjud bo'lsa — faqat super_admin boshqasini o'zgartira oladi
+router.put('/accounts/:id/role', async (req, res) => {
+    try {
+        const { role } = req.body;
+        if (!['super_admin', 'admin', 'manager'].includes(role)) {
+            return res.status(400).json({ error: 'Noto\'g\'ri rol' });
+        }
+
+        const superAdminExists = await AdminAccount.findOne({ role: 'super_admin' });
+        const requesterId = req.admin?.adminId;
+
+        if (superAdminExists) {
+            if (req.admin?.role !== 'super_admin') {
+                return res.status(403).json({ error: 'Faqat super admin rol o\'zgartira oladi' });
+            }
+        }
+        // super_admin yo'q bo'lsa — istalgan admin o'zini promote qila oladi (bootstrap)
+
+        const account = await AdminAccount.findByIdAndUpdate(
+            req.params.id,
+            { role },
+            { new: true }
+        ).select('-password');
+        if (!account) return res.status(404).json({ error: 'Admin topilmadi' });
+
+        res.json(account);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── Parol o'zgartirish (super admin istalgan adminni, oddiy admin o'zini) ───
+router.put('/accounts/:id/password', async (req, res) => {
+    try {
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 4) {
+            return res.status(400).json({ error: 'Parol kamida 4 ta belgi bo\'lishi kerak' });
+        }
+
+        const targetId = req.params.id;
+        const requesterId = req.admin?.adminId;
+
+        // super_admin istalgan akkaunt parolini o'zgartira oladi
+        // oddiy admin faqat o'z parolini o'zgartira oladi
+        if (req.admin?.role !== 'super_admin' && String(requesterId) !== String(targetId)) {
+            return res.status(403).json({ error: 'Faqat o\'z parolingizni o\'zgartira olasiz' });
+        }
+
+        const hashed = await bcrypt.hash(newPassword, 10);
+        const account = await AdminAccount.findByIdAndUpdate(
+            targetId,
+            { password: hashed },
+            { new: true }
+        ).select('-password');
+        if (!account) return res.status(404).json({ error: 'Admin topilmadi' });
+
+        res.json({ success: true, username: account.username });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

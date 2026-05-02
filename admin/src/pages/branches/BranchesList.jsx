@@ -156,6 +156,7 @@ export default function BranchesList() {
                                     <th>Ish vaqti</th>
                                     <th>Min buyurtma</th>
                                     <th>Radius</th>
+                                    <th>Operator</th>
                                     <th>Ochiq</th>
                                     <th>Faol</th>
                                     <th>Amal</th>
@@ -173,6 +174,12 @@ export default function BranchesList() {
                                         <td style={{ fontSize: 12 }}>{b.hours}</td>
                                         <td style={{ fontSize: 12 }}>{(b.minOrderAmount || 0).toLocaleString()} so'm</td>
                                         <td style={{ fontSize: 12 }}>{b.deliveryRadius} km</td>
+                                        <td>
+                                            {b.operatorChatId
+                                                ? <span style={{ color: 'var(--success)', fontSize: 12, fontWeight: 600 }}>✅ Ulangan</span>
+                                                : <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>— Yo'q</span>
+                                            }
+                                        </td>
                                         <td>
                                             <label className="switch">
                                                 <input type="checkbox" checked={b.isOpen} onChange={() => handleToggle(b, 'isOpen')} />
@@ -249,6 +256,47 @@ export default function BranchesList() {
                                 <label className="form-label">Uzunlik (lng)</label>
                                 <input className="form-input" type="number" step="0.000001" value={form.location?.lng} onChange={e => setLoc('lng', e.target.value)} placeholder="69.240100" />
                             </div>
+
+                            {/* Operator link */}
+                            {modal !== 'add' && modal._id && (
+                                <div style={{ gridColumn: 'span 2' }}>
+                                    <label className="form-label">👤 Operator ulash</label>
+                                    <div style={{
+                                        padding: '12px 14px', background: 'var(--bg-secondary)',
+                                        borderRadius: 12, border: '1px solid var(--border)',
+                                    }}>
+                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                                            Quyidagi havolani operatorga yuboring. Operator tugmani bosib bot bilan ulangach, buyurtmalar avtomatik keladigan bo'ladi.
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <div style={{
+                                                flex: 1, padding: '8px 12px', background: 'var(--bg-card)',
+                                                borderRadius: 8, border: '1px solid var(--border)',
+                                                fontSize: 12, color: 'var(--primary-light)',
+                                                fontWeight: 600, wordBreak: 'break-all',
+                                            }}>
+                                                https://t.me/efes_kebab_bot?start=op_{modal._id}
+                                            </div>
+                                            <button
+                                                className="btn btn-outline btn-sm"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(`https://t.me/efes_kebab_bot?start=op_${modal._id}`);
+                                                    alert('Havola nusxalandi!');
+                                                }}
+                                                style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                                            >
+                                                📋 Nusxa
+                                            </button>
+                                        </div>
+                                        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-secondary)' }}>
+                                            Hozirgi holat: {form.operatorChatId
+                                                ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✅ Ulangan (ID: {form.operatorChatId})</span>
+                                                : <span style={{ color: '#e67e22', fontWeight: 600 }}>⚠️ Hali operator ulanmagan</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             <div style={{ gridColumn: 'span 2', display: 'flex', gap: 24 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>

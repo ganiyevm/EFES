@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const BonusService = require('./bonus.service');
+const SseService = require('./sse.service');
 
 /**
  * Click sign formula (rasmiy):
@@ -133,6 +134,9 @@ class ClickService {
             await TelegramService.notifyOperator(order);
             await TelegramService.notifyCustomerStatus(order, { note: "Click orqali to'lov tasdiqlandi" });
         } catch (e) { console.error('[CLICK] Telegram error:', e.message); }
+
+        // SSE real-vaqt yangilash
+        SseService.emit(order._id, { status: order.status, paymentStatus: order.paymentStatus });
     }
 }
 

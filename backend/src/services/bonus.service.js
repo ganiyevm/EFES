@@ -4,6 +4,7 @@ const BonusTransaction = require('../models/BonusTransaction');
 class BonusService {
     // Har 10,000 so'mga 100 ball
     static calculatePoints(amount) {
+        if (!amount || amount <= 0) return 0;
         return Math.floor(amount / 10000) * 100;
     }
 

@@ -97,8 +97,21 @@ class TelegramService {
 
     static async notifyOperator(order) {
         const Branch = require('../models/Branch');
+        const Operator = require('../models/Operator');
         const branch = await Branch.findById(order.branch);
         if (!branch?.operatorChatId) return;
+
+        // Bloklangan yoki nofaol operatorlarga yubormaslik
+        const activeOps = await Operator.find({
+            branch: order.branch,
+            isBlocked: false,
+            isActive: true,
+        }).select('telegramId');
+        const activeIds = activeOps.map(o => o.telegramId);
+        // Agar operator bazada mavjud va bloklangan bo'lsa — o'tkazib yubor
+        const allOps = await Operator.find({ branch: order.branch }).select('telegramId');
+        const managedIds = allOps.map(o => o.telegramId);
+        if (managedIds.includes(branch.operatorChatId) && !activeIds.includes(branch.operatorChatId)) return;
 
         const items = order.items.map(i => `  • ${i.productName} x${i.qty} — ${i.price.toLocaleString()} so'm${i.note ? ` (${i.note})` : ''}`).join('\n');
 

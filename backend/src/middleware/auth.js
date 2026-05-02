@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 
 // Telegram WebApp autentifikatsiya
 const authTelegram = (req, res, next) => {
@@ -11,6 +10,10 @@ const authTelegram = (req, res, next) => {
         req.user = decoded;
         next();
     } catch (err) {
+        // TokenExpiredError — frontend refresh qilishi uchun maxsus kod
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Token muddati tugagan', code: 'TOKEN_EXPIRED' });
+        }
         res.status(401).json({ error: 'Yaroqsiz token' });
     }
 };

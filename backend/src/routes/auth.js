@@ -4,6 +4,26 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const AdminAccount = require('../models/AdminAccount');
+const RefreshToken = require('../models/RefreshToken');
+
+const ACCESS_TOKEN_TTL = '15m';   // Qisqa — xavfsizroq
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 kun (ms)
+
+function generateAccessToken(payload) {
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+}
+
+async function generateRefreshToken(user, userAgent = '') {
+    const token = crypto.randomBytes(40).toString('hex');
+    await RefreshToken.create({
+        token,
+        user: user._id,
+        telegramId: user.telegramId,
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+        userAgent,
+    });
+    return token;
+}
 
 // ─── Telegram WebApp Auth ───
 router.post('/telegram', async (req, res) => {
@@ -56,13 +76,10 @@ router.post('/telegram', async (req, res) => {
             await user.save();
         }
 
-        const token = jwt.sign(
-            { userId: user._id, telegramId },
-            process.env.JWT_SECRET,
-            { expiresIn: '30d' }
-        );
+        const accessToken = generateAccessToken({ userId: user._id, telegramId });
+        const refreshToken = await generateRefreshToken(user, req.headers['user-agent'] || '');
 
-        res.json({ token, user });
+        res.json({ token: accessToken, refreshToken, user });
     } catch (err) {
         console.error('Auth error:', err);
         res.status(500).json({ error: 'Server xatosi' });
@@ -158,14 +175,10 @@ router.post('/verify-otp', async (req, res) => {
         user.otpExpiry = null;
         await user.save();
 
-        // Yangilangan token (user ma'lumotlari o'zgarsa ham)
-        const newToken = jwt.sign(
-            { userId: user._id, telegramId: user.telegramId },
-            process.env.JWT_SECRET,
-            { expiresIn: '30d' },
-        );
+        const accessToken = generateAccessToken({ userId: user._id, telegramId: user.telegramId });
+        const refreshToken = await generateRefreshToken(user, req.headers['user-agent'] || '');
 
-        res.json({ success: true, token: newToken, user });
+        res.json({ success: true, token: accessToken, refreshToken, user });
     } catch (err) {
         if (err.name === 'JsonWebTokenError') return res.status(401).json({ error: 'Yaroqsiz token' });
         console.error('OTP verify error:', err);
@@ -180,10 +193,12 @@ router.post('/admin/login', async (req, res) => {
 
         let admin = await AdminAccount.findOne({ username });
 
-        // Birinchi marta — default admin yaratish
-        if (!admin && username === 'admin' && password === 'efes2026') {
-            const hashed = await bcrypt.hash('efes2026', 10);
-            admin = await AdminAccount.create({ username: 'admin', password: hashed, role: 'admin' });
+        // Birinchi marta — default admin yaratish (faqat ADMIN_INIT_PASSWORD env orqali)
+        const initPassword = process.env.ADMIN_INIT_PASSWORD;
+        if (!admin && username === 'admin' && initPassword && password === initPassword) {
+            const hashed = await bcrypt.hash(initPassword, 10);
+            admin = await AdminAccount.create({ username: 'admin', password: hashed, role: 'super_admin' });
+            console.log('[ADMIN INIT] Birinchi admin yaratildi');
         }
 
         if (!admin) return res.status(401).json({ error: 'Login yoki parol noto\'g\'ri' });
@@ -197,9 +212,68 @@ router.post('/admin/login', async (req, res) => {
             { expiresIn: '7d' }
         );
 
-        res.json({ token, admin: { id: admin._id, username: admin.username, role: admin.role } });
+        const adminToken = jwt.sign(
+            { adminId: admin._id, username: admin.username, role: admin.role },
+            process.env.ADMIN_JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        res.json({ token: adminToken, admin: { id: admin._id, username: admin.username, role: admin.role } });
     } catch (err) {
         console.error('Admin login error:', err);
+        res.status(500).json({ error: 'Server xatosi' });
+    }
+});
+
+// ─── Token yangilash (Refresh) ───
+router.post('/refresh', async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) return res.status(400).json({ error: 'refreshToken kerak' });
+
+        const stored = await RefreshToken.findOne({ token: refreshToken, isRevoked: false });
+        if (!stored) return res.status(401).json({ error: 'Yaroqsiz yoki eskirgan token' });
+        if (stored.expiresAt < new Date()) {
+            await RefreshToken.deleteOne({ _id: stored._id });
+            return res.status(401).json({ error: 'Token muddati tugagan. Qayta kiring.' });
+        }
+
+        const user = await User.findById(stored.user);
+        if (!user) return res.status(401).json({ error: 'Foydalanuvchi topilmadi' });
+
+        // Eski refresh tokenni o'chirib yangi chiqarish (rotation)
+        await RefreshToken.deleteOne({ _id: stored._id });
+        const newAccessToken = generateAccessToken({ userId: user._id, telegramId: user.telegramId });
+        const newRefreshToken = await generateRefreshToken(user, req.headers['user-agent'] || '');
+
+        res.json({ token: newAccessToken, refreshToken: newRefreshToken });
+    } catch (err) {
+        console.error('Refresh error:', err);
+        res.status(500).json({ error: 'Server xatosi' });
+    }
+});
+
+// ─── Chiqish (Logout) — refresh tokenni bekor qilish ───
+router.post('/logout', async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        if (refreshToken) {
+            await RefreshToken.updateOne({ token: refreshToken }, { isRevoked: true });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Server xatosi' });
+    }
+});
+
+// ─── Barcha qurilmalardan chiqish ───
+router.post('/logout-all', async (req, res) => {
+    try {
+        const tokenHeader = req.headers.authorization?.split(' ')[1];
+        if (!tokenHeader) return res.status(401).json({ error: 'Token kerak' });
+        const decoded = jwt.verify(tokenHeader, process.env.JWT_SECRET);
+        await RefreshToken.updateMany({ user: decoded.userId }, { isRevoked: true });
+        res.json({ success: true, message: 'Barcha qurilmalardan chiqildi' });
+    } catch (err) {
         res.status(500).json({ error: 'Server xatosi' });
     }
 });

@@ -2,6 +2,7 @@ const https = require('https');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const BonusService = require('./bonus.service');
+const SseService = require('./sse.service');
 
 // Payme transaction timeout — 12 soat (ms)
 const TRANSACTION_TIMEOUT = 12 * 60 * 60 * 1000;
@@ -188,6 +189,8 @@ class PaymeService {
             await TelegramService.notifyOperator(order);
             await TelegramService.notifyCustomerStatus(order, { note: "Payme orqali to'lov tasdiqlandi" });
         } catch (e) { console.error('[PAYME] Telegram error:', e.message); }
+
+        SseService.emit(order._id, { status: order.status, paymentStatus: order.paymentStatus });
 
         return { result: { perform_time: performTime, transaction: order._id.toString(), state: 2 }, id };
     }

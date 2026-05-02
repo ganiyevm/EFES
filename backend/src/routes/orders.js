@@ -6,6 +6,7 @@ const Branch = require('../models/Branch');
 const Promotion = require('../models/Promotion');
 const BonusService = require('../services/bonus.service');
 const TelegramService = require('../services/telegram.service');
+const SseService = require('../services/sse.service');
 const { authTelegram } = require('../middleware/auth');
 const { getDeliveryConfig } = require('../utils/deliveryConfig');
 
@@ -44,21 +45,33 @@ router.post('/', authTelegram, async (req, res) => {
             }
         }
 
-        // Mahsulot narxlarini tekshirish
+        if (!items || items.length === 0) {
+            return res.status(400).json({ error: 'Buyurtmada mahsulot yo\'q' });
+        }
+
+        // Mahsulot narxlarini tekshirish — bitta $in so'rovi (N+1 oldini oladi)
+        const productIds = items.map(i => i.productId).filter(Boolean);
+        const products = await Product.find({ _id: { $in: productIds }, isActive: true }).lean();
+        const productMap = Object.fromEntries(products.map(p => [p._id.toString(), p]));
+
         let subtotal = 0;
         const orderItems = [];
         for (const item of items) {
-            const product = await Product.findById(item.productId);
+            const product = productMap[item.productId?.toString()];
             if (!product) continue;
-            const itemTotal = product.price * (item.qty || 1);
-            subtotal += itemTotal;
+            const qty = Math.max(1, parseInt(item.qty) || 1);
+            subtotal += product.price * qty;
             orderItems.push({
                 product: product._id,
                 productName: product.name,
                 price: product.price,
-                qty: item.qty || 1,
+                qty,
                 note: item.note || '',
             });
+        }
+
+        if (orderItems.length === 0) {
+            return res.status(400).json({ error: 'Hech bir mahsulot topilmadi' });
         }
 
         // Delivery config (admin sozlamalari)
@@ -92,7 +105,6 @@ router.post('/', authTelegram, async (req, res) => {
                     }
                     promoDiscount = Math.min(promoDiscount, subtotal);
                     appliedPromoId = promo._id;
-                    await Promotion.findByIdAndUpdate(promo._id, { $inc: { usageCount: 1 } });
                 }
             }
         }
@@ -131,6 +143,11 @@ router.post('/', authTelegram, async (req, res) => {
             status: paymentMethod === 'cash' ? 'pending_operator' : 'awaiting_payment',
             paymentStatus: paymentMethod === 'cash' ? 'pending' : 'pending',
         });
+
+        // Promo kod counter — order muvaffaqiyatli yaratilgandan keyin
+        if (appliedPromoId) {
+            await Promotion.findByIdAndUpdate(appliedPromoId, { $inc: { usageCount: 1 } });
+        }
 
         // Bonus sarflash
         if (actualBonusDiscount > 0) {
@@ -203,6 +220,9 @@ router.get('/:id', authTelegram, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id).populate('branch', 'name address phone');
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (order.user.toString() !== req.user.userId) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
         res.json(order);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -214,6 +234,9 @@ router.patch('/:id/cancel', authTelegram, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (order.user.toString() !== req.user.userId) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
 
         const cancellable = ['awaiting_payment', 'pending_operator'];
         if (!cancellable.includes(order.status)) {
@@ -232,8 +255,42 @@ router.patch('/:id/cancel', authTelegram, async (req, res) => {
         await order.save();
 
         TelegramService.notifyCustomerStatus(order, { note: "Siz tomoningizdan bekor qilindi" }).catch(() => {});
+        SseService.emit(order._id, { status: order.status, paymentStatus: order.paymentStatus });
 
         res.json(order);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── SSE: Buyurtma real-vaqt holati ───
+// Mijoz GET /api/orders/:id/stream ga ulanadi, holat o'zgarganda event oladi.
+router.get('/:id/stream', authTelegram, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id).select('user status paymentStatus').lean();
+        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (order.user.toString() !== req.user.userId) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no'); // Nginx proxy buffering o'chirish
+        res.flushHeaders();
+
+        // Hozirgi holat darhol yuboriladi
+        res.write(`data: ${JSON.stringify({ status: order.status, paymentStatus: order.paymentStatus })}\n\n`);
+
+        // Ping har 25 soniyada — proxy timeout oldini oladi
+        const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { clearInterval(ping); } }, 25000);
+
+        SseService.subscribe(req.params.id, res);
+
+        req.on('close', () => {
+            clearInterval(ping);
+            SseService.unsubscribe(req.params.id, res);
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

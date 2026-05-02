@@ -16,7 +16,8 @@ export default function Login() {
         try {
             const { data } = await api.post('/admin/login', { username, password });
             localStorage.setItem('efes_admin_token', data.token);
-            localStorage.setItem('efes_admin_role', data.admin?.role || 'admin');
+            localStorage.setItem('efes_admin_role', data.role || 'admin');
+            localStorage.setItem('efes_admin_id', data.id || '');
             navigate('/admin');
         } catch (err) {
             setError(err.response?.data?.error || 'Login yoki parol xato');

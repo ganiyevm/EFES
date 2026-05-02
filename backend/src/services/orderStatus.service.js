@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Courier = require('../models/Courier');
 const BonusTransaction = require('../models/BonusTransaction');
 const BonusService = require('./bonus.service');
+const SseService = require('./sse.service');
 
 // Buyurtma status o'zgarishining yon-ta'sirlarini markazlashtiradi
 // (vaqtlar, to'lov statusi, mijoz/kurier bonusi). Customer Telegram
@@ -45,6 +46,14 @@ class OrderStatusService {
         }
 
         await order.save();
+
+        // Real-vaqt yangilash: SSE orqali ulangan clientlarga yuborish
+        SseService.emit(order._id, {
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            deliveredAt: order.deliveredAt,
+        });
+
         return order;
     }
 }

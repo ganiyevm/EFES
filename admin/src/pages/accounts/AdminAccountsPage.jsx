@@ -5,12 +5,16 @@ const EMPTY = { username: '', password: '', role: 'admin' };
 
 export default function AdminAccountsPage() {
     const isSuperAdmin = localStorage.getItem('efes_admin_role') === 'super_admin';
+    const myId = localStorage.getItem('efes_admin_id');
     const [accounts, setAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
     const [form, setForm] = useState(EMPTY);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [pwModal, setPwModal] = useState(null); // account object
+    const [newPw, setNewPw] = useState('');
+    const [pwSaving, setPwSaving] = useState(false);
 
     const fetchAccounts = () => {
         setLoading(true);
@@ -40,6 +44,34 @@ export default function AdminAccountsPage() {
             await api.delete(`/admin/accounts/${id}`);
             fetchAccounts();
         } catch { }
+    };
+
+    const handleRoleChange = async (account, newRole) => {
+        const roleLabel = newRole === 'super_admin' ? 'Super Admin' : newRole === 'admin' ? 'Admin' : 'Manager';
+        if (!confirm(`"${account.username}" rolini "${roleLabel}" ga o'zgartirishni tasdiqlaysizmi?`)) return;
+        try {
+            await api.put(`/admin/accounts/${account._id}/role`, { role: newRole });
+            // Token yangilanishi kerak — qayta login tavsiya
+            if (account._id === localStorage.getItem('efes_admin_id')) {
+                alert('Rol o\'zgartirildi. Yangilanishi uchun qayta login qiling.');
+            }
+            fetchAccounts();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Xatolik');
+        }
+    };
+
+    const handlePasswordChange = async () => {
+        if (!newPw || newPw.length < 4) { alert('Parol kamida 4 ta belgi bo\'lishi kerak'); return; }
+        setPwSaving(true);
+        try {
+            await api.put(`/admin/accounts/${pwModal._id}/password`, { newPassword: newPw });
+            alert(`✅ "${pwModal.username}" paroli muvaffaqiyatli o'zgartirildi!`);
+            setPwModal(null);
+            setNewPw('');
+        } catch (err) {
+            alert(err.response?.data?.error || 'Xatolik');
+        } finally { setPwSaving(false); }
     };
 
     const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -87,15 +119,36 @@ export default function AdminAccountsPage() {
                                             {new Date(a.createdAt).toLocaleDateString()}
                                         </td>
                                         <td>
-                                            {isSuperAdmin && (
-                                                <button
-                                                    className="btn btn-sm"
-                                                    style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
-                                                    onClick={() => handleDelete(a._id, a.username)}
+                                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                                <select
+                                                    className="form-input"
+                                                    value={a.role}
+                                                    onChange={e => handleRoleChange(a, e.target.value)}
+                                                    style={{ fontSize: 12, padding: '4px 8px', height: 'auto', width: 'auto', minWidth: 120 }}
                                                 >
-                                                    🗑 O'chirish
-                                                </button>
-                                            )}
+                                                    <option value="super_admin">🔑 Super Admin</option>
+                                                    <option value="admin">👑 Admin</option>
+                                                    <option value="manager">📊 Manager</option>
+                                                </select>
+                                                {(isSuperAdmin || String(a._id) === String(myId)) && (
+                                                    <button
+                                                        className="btn btn-outline btn-sm"
+                                                        onClick={() => { setPwModal(a); setNewPw(''); }}
+                                                        title="Parolni o'zgartirish"
+                                                    >
+                                                        🔑 Parol
+                                                    </button>
+                                                )}
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        className="btn btn-sm"
+                                                        style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
+                                                        onClick={() => handleDelete(a._id, a.username)}
+                                                    >
+                                                        🗑
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -139,6 +192,40 @@ export default function AdminAccountsPage() {
                             <button className="btn btn-outline" onClick={() => setModal(false)}>Bekor</button>
                             <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
                                 {saving ? '⏳' : '✅ Saqlash'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Parol o'zgartirish modali */}
+            {pwModal && (
+                <div className="modal-overlay" onClick={() => setPwModal(null)}>
+                    <div className="modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <span className="modal-title">🔑 Parolni o'zgartirish</span>
+                            <button onClick={() => setPwModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                                Admin: <strong>{pwModal.username}</strong>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Yangi parol</label>
+                                <input
+                                    className="form-input"
+                                    type="password"
+                                    value={newPw}
+                                    onChange={e => setNewPw(e.target.value)}
+                                    placeholder="Kamida 4 ta belgi"
+                                    autoFocus
+                                    autoComplete="new-password"
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-outline" onClick={() => setPwModal(null)}>Bekor</button>
+                            <button className="btn btn-primary" disabled={pwSaving} onClick={handlePasswordChange}>
+                                {pwSaving ? '⏳' : '✅ Saqlash'}
                             </button>
                         </div>
                     </div>

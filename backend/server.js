@@ -21,7 +21,16 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(cors({ origin: true, credentials: true }));
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+app.use(cors({
+    origin: (origin, cb) => {
+        // Bot WebApp va server-to-server (origin yo'q) har doim o'tadi
+        if (!origin) return cb(null, true);
+        if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+        cb(new Error('CORS: ruxsat etilmagan origin'));
+    },
+    credentials: true,
+}));
 
 // ─── Rate Limiting ───
 const limiter = rateLimit({
@@ -57,6 +66,34 @@ app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/delivery', require('./src/routes/delivery'));
 app.use('/api/promotions', require('./src/routes/promotions'));
 app.use('/api/couriers', require('./src/routes/couriers'));
+app.use('/api/operators', require('./src/routes/operators'));
+
+// ─── Emergency parol tiklash (ADMIN_RESET_SECRET orqali) ───
+app.post('/api/admin/emergency-reset', async (req, res) => {
+    try {
+        const { secret, username, newPassword } = req.body;
+        const RESET_SECRET = process.env.ADMIN_RESET_SECRET;
+        if (!RESET_SECRET || secret !== RESET_SECRET) {
+            return res.status(403).json({ error: 'Noto\'g\'ri maxfiy kalit' });
+        }
+        if (!username || !newPassword || newPassword.length < 4) {
+            return res.status(400).json({ error: 'username va newPassword (min 4 ta belgi) kerak' });
+        }
+        const bcrypt = require('bcryptjs');
+        const AdminAccount = require('./src/models/AdminAccount');
+        const hashed = await bcrypt.hash(newPassword, 10);
+        const account = await AdminAccount.findOneAndUpdate(
+            { username },
+            { password: hashed },
+            { new: true }
+        );
+        if (!account) return res.status(404).json({ error: 'Admin topilmadi' });
+        console.log(`[EMERGENCY RESET] ${username} paroli tiklandi`);
+        res.json({ success: true, username: account.username });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ─── Kurier botlari webhook (broadcast + mission) ───
 const CourierBotService = require('./src/services/courierBot.service');

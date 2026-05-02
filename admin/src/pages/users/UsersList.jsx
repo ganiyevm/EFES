@@ -101,7 +101,10 @@ export default function UsersList() {
                                         <td style={{ fontWeight: 600 }}>{u.totalOrders || 0}</td>
                                         <td style={{ fontWeight: 600 }}>{(u.totalSpent || 0).toLocaleString()} so'm</td>
                                         <td><span style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 6 }}>{u.language || 'uz'}</span></td>
-                                        <td style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(u.registeredAt).toLocaleDateString()}</td>
+                                        <td style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                            <div>{new Date(u.registeredAt).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+                                            <div style={{ color: 'var(--primary-light)', fontWeight: 600 }}>{new Date(u.registeredAt).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</div>
+                                        </td>
                                         <td>
                                             <div style={{ display: 'flex', gap: 6 }}>
                                                 <button

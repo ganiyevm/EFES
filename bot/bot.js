@@ -257,6 +257,30 @@ async function handleStart(msg) {
         }
     }
 
+    // Deep link: /start op_BRANCHID — operator registration
+    if (payload.startsWith('op_')) {
+        const branchId = payload.replace('op_', '');
+        try {
+            const branch = await Branch.findById(branchId);
+            if (branch) {
+                branch.operatorChatId = from.id;
+                if (!branch.operatorIds) branch.operatorIds = [];
+                if (!branch.operatorIds.includes(from.id)) branch.operatorIds.push(from.id);
+                await branch.save();
+                await sendMessage(chatId,
+                    `✅ Siz <b>${branch.name || `Filial #${branch.number}`}</b> filiali operatori sifatida ulandi!\n\n` +
+                    `Endi yangi buyurtmalar sizga yuboriladi. 🔔`
+                );
+            } else {
+                await sendMessage(chatId, '❌ Filial topilmadi. Admin bilan bog\'laning.');
+            }
+        } catch (e) {
+            console.error('Operator registration error:', e.message);
+            await sendMessage(chatId, '❌ Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
+        }
+        return;
+    }
+
     const isNew = !user.phone;
     const name = user.firstName || from.first_name || 'Mehmon';
     const welcomeText = isNew ? t(user.language, 'welcome', name) : t(user.language, 'welcomeBack', name);

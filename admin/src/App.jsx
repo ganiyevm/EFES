@@ -12,6 +12,7 @@ import DeliverySettings from './pages/settings/DeliverySettings';
 import AppContentSettings from './pages/settings/AppContentSettings';
 import AdminAccountsPage from './pages/accounts/AdminAccountsPage';
 import PromotionsPage from './pages/promotions/PromotionsPage';
+import OperatorsList from './pages/operators/OperatorsList';
 import Sidebar from './components/Sidebar';
 
 function PrivateRoute({ children }) {
@@ -35,6 +36,7 @@ export default function App() {
                                     <Route path="products" element={<ProductsList />} />
                                     <Route path="branches" element={<BranchesList />} />
                                     <Route path="couriers" element={<CouriersList />} />
+                                    <Route path="operators" element={<OperatorsList />} />
                                     <Route path="users" element={<UsersList />} />
                                     <Route path="import" element={<ImportPage />} />
                                     <Route path="delivery" element={<DeliverySettings />} />
