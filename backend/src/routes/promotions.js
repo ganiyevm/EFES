@@ -1,6 +1,18 @@
 const router = require('express').Router();
 const Promotion = require('../models/Promotion');
 const { authAdmin } = require('../middleware/auth');
+const { upload, saveImage } = require('../services/upload.service');
+
+// ─── Rasm yuklash (aksiyalar uchun) ───
+router.post('/upload-image', authAdmin, upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'Rasm fayli kerak' });
+        const imageUrl = await saveImage(req.file, 'efes/promotions');
+        res.json({ imageUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ─── Public: Faol aksiyalar ───
 router.get('/', async (req, res) => {

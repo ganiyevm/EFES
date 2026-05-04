@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
+import ImageUploader from '../../components/ImageUploader';
 
 const MENU_IMAGES = [
     { file: 'arabkebab.jpg', label: 'Arab Kebab' },
@@ -231,8 +232,8 @@ export default function ProductsList() {
                                 <input className="form-input" type="number" value={form.prepTime} onChange={e => setField('prepTime', e.target.value)} placeholder="15" />
                             </div>
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                <label className="form-label">Rasm tanlash</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 8 }}>
+                                <label className="form-label">Tayyor rasmlardan tanlash</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginBottom: 12 }}>
                                     {MENU_IMAGES.map(img => {
                                         const url = `/uploads/menu/${img.file}`;
                                         const selected = form.imageUrl === url;
@@ -256,7 +257,12 @@ export default function ProductsList() {
                                         );
                                     })}
                                 </div>
-                                <input className="form-input" value={form.imageUrl} onChange={e => setField('imageUrl', e.target.value)} placeholder="Yoki URL kiriting: https://..." style={{ fontSize: 12 }} />
+                                <ImageUploader
+                                    value={form.imageUrl}
+                                    onChange={v => setField('imageUrl', v)}
+                                    uploadPath="/products/upload-image"
+                                    label="Yoki o'z rasmingizni yuklang"
+                                />
                             </div>
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                 <label className="form-label">Tarkibi</label>

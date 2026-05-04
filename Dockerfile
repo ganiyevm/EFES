@@ -28,6 +28,10 @@ RUN cd backend && npm ci --omit=dev
 COPY backend/ ./backend/
 COPY bot/ ./bot/
 
+# Bot backend node_modules va src papkasidan foydalanadi
+RUN ln -s /app/backend/node_modules /app/bot/node_modules && \
+    ln -s /app/backend/src /app/bot/src
+
 # Build artefaktlarni ko'chirish
 COPY --from=admin-build     /app/admin/dist    ./admin/dist
 COPY --from=frontend-build  /app/frontend/dist ./frontend/dist

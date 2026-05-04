@@ -34,6 +34,20 @@ async function registerWebhook() {
     } catch (e) {
         console.error('❌ Webhook xatosi:', e.message);
     }
+
+    // Doimiy "Menyuni ochish" tugmasi — har doim input yonida ko'rinib turadi
+    try {
+        await api.post('/setMyMenuButton', {
+            menu_button: {
+                type: 'web_app',
+                text: '🍽 Menyuni ochish',
+                web_app: { url: WEBAPP_URL },
+            },
+        });
+        console.log('✅ Menu button o\'rnatildi');
+    } catch (e) {
+        console.error('❌ Menu button xatosi:', e.message);
+    }
 }
 
 // ─── i18n ────────────────────────────────────────────────────────────────

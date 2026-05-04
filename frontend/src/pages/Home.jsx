@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -181,12 +181,8 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* ══ PROMO BANNER ══ */}
-            {promos.length > 0 && (
-                <div style={{ overflowX: 'auto', display: 'flex', gap: 12, padding: '12px 16px 4px', scrollbarWidth: 'none' }}>
-                    {promos.map(p => <PromoBanner key={p._id} promo={p} lang={lang} />)}
-                </div>
-            )}
+            {/* ══ PROMO BANNER CAROUSEL ══ */}
+            {promos.length > 0 && <PromoCarousel promos={promos} lang={lang} />}
 
             {/* ══ SEARCH ══ */}
             <div style={{ padding: '12px 16px 0' }}>
@@ -307,35 +303,139 @@ export default function Home() {
     );
 }
 
-function PromoBanner({ promo, lang }) {
+function PromoCarousel({ promos, lang }) {
+    const [active, setActive] = useState(0);
+    const timerRef = useRef(null);
+    const touchStartX = useRef(null);
+
+    const next = useCallback(() => setActive(i => (i + 1) % promos.length), [promos.length]);
+    const prev = useCallback(() => setActive(i => (i - 1 + promos.length) % promos.length), [promos.length]);
+
+    useEffect(() => {
+        if (promos.length <= 1) return;
+        timerRef.current = setInterval(next, 3500);
+        return () => clearInterval(timerRef.current);
+    }, [next, promos.length]);
+
+    const resetTimer = () => {
+        clearInterval(timerRef.current);
+        timerRef.current = setInterval(next, 3500);
+    };
+
+    const goTo = (i) => { setActive(i); resetTimer(); };
+
+    const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+    const onTouchEnd = (e) => {
+        if (touchStartX.current === null) return;
+        const diff = touchStartX.current - e.changedTouches[0].clientX;
+        if (Math.abs(diff) > 40) { diff > 0 ? next() : prev(); resetTimer(); }
+        touchStartX.current = null;
+    };
+
+    return (
+        <div style={{ padding: '12px 16px 4px' }}>
+            <style>{`
+                @keyframes promoPulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+                @keyframes promoSlideIn { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
+            `}</style>
+            <div
+                style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', cursor: 'pointer' }}
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+            >
+                {promos.map((p, i) => (
+                    <div
+                        key={p._id}
+                        style={{
+                            display: i === active ? 'block' : 'none',
+                            animation: i === active ? 'promoSlideIn 0.4s ease' : 'none',
+                        }}
+                    >
+                        <PromoBannerCard promo={p} lang={lang} />
+                    </div>
+                ))}
+
+                {/* Dots */}
+                {promos.length > 1 && (
+                    <div style={{
+                        position: 'absolute', bottom: 10, left: 0, right: 0,
+                        display: 'flex', justifyContent: 'center', gap: 6,
+                    }}>
+                        {promos.map((_, i) => (
+                            <div
+                                key={i}
+                                onClick={() => goTo(i)}
+                                style={{
+                                    width: i === active ? 20 : 6, height: 6,
+                                    borderRadius: 4,
+                                    background: i === active ? '#F0C040' : 'rgba(255,255,255,0.45)',
+                                    transition: 'all 0.35s ease',
+                                    cursor: 'pointer',
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function PromoBannerCard({ promo, lang }) {
     const title = promo.title?.[lang] || promo.title?.uz || '';
-    const discountLabel = promo.discountType === 'percent'
-        ? `${promo.discountValue}%`
-        : `${promo.discountValue?.toLocaleString()} so'm`;
+    const hasDiscount = promo.discountValue > 0;
+    const discountLabel = hasDiscount
+        ? (promo.discountType === 'percent'
+            ? `-${promo.discountValue}%`
+            : `-${promo.discountValue?.toLocaleString()} so'm`)
+        : null;
+    const hasImage = !!promo.imageUrl;
 
     return (
         <div style={{
-            minWidth: 280, flexShrink: 0,
-            background: 'linear-gradient(135deg, #1A0A00 0%, #5C1A1A 100%)',
-            borderRadius: 18, padding: '16px 20px',
+            width: '100%', height: 180,
+            background: hasImage ? '#000' : 'linear-gradient(135deg, #1A0A00 0%, #5C1A1A 100%)',
             position: 'relative', overflow: 'hidden',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
         }}>
-            <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-            <div style={{
-                display: 'inline-block', background: '#C1440E',
-                borderRadius: 8, padding: '3px 10px',
-                fontSize: 12, fontWeight: 800, color: '#fff', marginBottom: 8,
-            }}>
-                -{discountLabel} chegirma
-            </div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff', lineHeight: 1.35 }}>{title}</div>
-            {promo.promoCode && (
-                <div style={{ marginTop: 8, display: 'inline-flex', gap: 6, alignItems: 'center', background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '4px 10px' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>KOD:</span>
-                    <span style={{ fontSize: 13, fontWeight: 900, color: '#F0C040', letterSpacing: 2, fontFamily: 'monospace' }}>{promo.promoCode}</span>
-                </div>
+            {/* Bg image */}
+            {hasImage && (
+                <img
+                    src={promo.imageUrl}
+                    alt={title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: 0.85 }}
+                />
             )}
+            {/* Gradient overlay */}
+            <div style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(to top, rgba(10,2,0,0.88) 0%, rgba(10,2,0,0.15) 60%, transparent 100%)',
+            }} />
+            {/* Decorative circle (no image) */}
+            {!hasImage && (
+                <div style={{ position: 'absolute', top: -40, right: -40, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
+            )}
+            {/* Content */}
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '14px 16px 20px' }}>
+                {discountLabel && (
+                    <div style={{
+                        display: 'inline-block', background: '#C1440E',
+                        borderRadius: 8, padding: '4px 12px',
+                        fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 7,
+                        boxShadow: '0 2px 8px rgba(193,68,14,0.4)',
+                    }}>
+                        {discountLabel} chegirma
+                    </div>
+                )}
+                {title && (
+                    <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', lineHeight: 1.3, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>{title}</div>
+                )}
+                {promo.promoCode && (
+                    <div style={{ marginTop: 8, display: 'inline-flex', gap: 6, alignItems: 'center', background: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: '4px 12px', backdropFilter: 'blur(4px)' }}>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>KOD:</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, color: '#F0C040', letterSpacing: 2, fontFamily: 'monospace' }}>{promo.promoCode}</span>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

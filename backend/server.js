@@ -183,7 +183,10 @@ const start = async () => {
     require('./src/jobs/dailyAnalytics');
     app.listen(PORT, () => {
         console.log(`🍽 EFES Delivery API ishga tushdi: http://localhost:${PORT}`);
-        CourierBotService.registerWebhooks().catch(e => console.error('Kurier bot:', e.message));
+        // Cluster rejimida faqat birinchi instance webhookni ro'yxatga oladi
+        if (!process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === '0') {
+            CourierBotService.registerWebhooks().catch(e => console.error('Kurier bot:', e.message));
+        }
     });
 };
 

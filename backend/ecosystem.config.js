@@ -12,7 +12,7 @@ module.exports = {
     apps: [
         {
             name: 'efes-api',
-            script: './server.js',
+            script: '/app/backend/server.js',
             instances: process.env.NODE_ENV === 'production' ? 'max' : 1,
             exec_mode: process.env.NODE_ENV === 'production' ? 'cluster' : 'fork',
             watch: false,
@@ -20,22 +20,14 @@ module.exports = {
             restart_delay: 3000,
             max_restarts: 10,
             exp_backoff_restart_delay: 100,
-            env: {
-                NODE_ENV: 'development',
-                PORT: 3000,
-            },
-            env_production: {
-                NODE_ENV: 'production',
-                PORT: 3000,
-            },
-            error_file: './logs/api-error.log',
-            out_file: './logs/api-out.log',
+            env: { NODE_ENV: 'development', PORT: 3000 },
+            env_production: { NODE_ENV: 'production', PORT: 3000 },
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
             merge_logs: true,
         },
         {
             name: 'efes-bot',
-            script: process.env.BOT_SCRIPT || '../bot/bot.js',
+            script: '/app/bot/bot.js',
             instances: 1,
             exec_mode: 'fork',
             watch: false,
@@ -43,16 +35,8 @@ module.exports = {
             restart_delay: 5000,
             max_restarts: 10,
             exp_backoff_restart_delay: 200,
-            env: {
-                NODE_ENV: 'development',
-                PORT: 3001,
-            },
-            env_production: {
-                NODE_ENV: 'production',
-                PORT: 3001,
-            },
-            error_file: './logs/bot-error.log',
-            out_file: './logs/bot-out.log',
+            env: { NODE_ENV: 'development', PORT: 3001 },
+            env_production: { NODE_ENV: 'production', PORT: 3001 },
             log_date_format: 'YYYY-MM-DD HH:mm:ss',
         },
     ],

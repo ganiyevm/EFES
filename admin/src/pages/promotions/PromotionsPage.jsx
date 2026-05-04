@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import ImageUploader from '../../components/ImageUploader';
 
 const EMPTY = {
     title: { uz: '', ru: '', en: '' },
     description: { uz: '', ru: '', en: '' },
     imageUrl: '',
     discountType: 'percent',
-    discountValue: 10,
+    discountValue: 0,
     minOrderAmount: 0,
     maxDiscount: 0,
     promoCode: '',
@@ -61,7 +62,7 @@ export default function PromotionsPage() {
 
     const handleSave = async () => {
         if (!form.title.uz) { alert('Sarlavha (UZ) kerak'); return; }
-        if (!form.discountValue || form.discountValue <= 0) { alert('Chegirma qiymati kerak'); return; }
+        // discountValue ixtiyoriy — 0 ham bo'lishi mumkin
         setSaving(true);
         try {
             const payload = {
@@ -157,7 +158,9 @@ export default function PromotionsPage() {
                                         color: p.isActive && !isExpired(p) ? '#1a1a24' : 'var(--text)',
                                         whiteSpace: 'nowrap',
                                     }}>
-                                        {p.discountType === 'percent' ? `${p.discountValue}%` : `${p.discountValue.toLocaleString()} so'm`}
+                                        {p.discountValue > 0
+                                            ? (p.discountType === 'percent' ? `−${p.discountValue}%` : `−${p.discountValue.toLocaleString()} so'm`)
+                                            : '—'}
                                     </div>
                                 </div>
                             </div>
@@ -245,9 +248,21 @@ export default function PromotionsPage() {
                                 </div>
                                 {/* Discount value */}
                                 <div className="form-group">
-                                    <label className="form-label">Chegirma miqdori {form.discountType === 'percent' ? '(%)' : "(so'm)"}</label>
-                                    <input className="form-input" type="number" value={form.discountValue}
-                                        onChange={e => setField('discountValue', parseFloat(e.target.value) || 0)} />
+                                    <label className="form-label">
+                                        Chegirma miqdori {form.discountType === 'percent' ? '(%)' : "(so'm)"}
+                                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 400, marginLeft: 6 }}>(ixtiyoriy)</span>
+                                    </label>
+                                    <input
+                                        className="form-input"
+                                        type="number"
+                                        min="0"
+                                        value={form.discountValue}
+                                        placeholder="0"
+                                        onChange={e => setField('discountValue', parseFloat(e.target.value) || 0)}
+                                    />
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
+                                        0 qoldirsangiz chegirma ko'rinmaydi
+                                    </div>
                                 </div>
                                 {/* Min order */}
                                 <div className="form-group">
@@ -294,12 +309,13 @@ export default function PromotionsPage() {
                                     <input className="form-input" type="number" value={form.sortOrder}
                                         onChange={e => setField('sortOrder', parseInt(e.target.value) || 0)} />
                                 </div>
-                                {/* Image URL */}
                                 <div className="form-group">
-                                    <label className="form-label">Rasm URL (ixtiyoriy)</label>
-                                    <input className="form-input" value={form.imageUrl}
-                                        onChange={e => setField('imageUrl', e.target.value)}
-                                        placeholder="https://..." />
+                                    <ImageUploader
+                                        value={form.imageUrl}
+                                        onChange={v => setField('imageUrl', v)}
+                                        uploadPath="/promotions/upload-image"
+                                        label="Rasm (ixtiyoriy)"
+                                    />
                                 </div>
                             </div>
 
