@@ -13,7 +13,7 @@ module.exports = {
         {
             name: 'efes-api',
             script: '/app/backend/server.js',
-            instances: process.env.NODE_ENV === 'production' ? 'max' : 1,
+            instances: process.env.NODE_ENV === 'production' ? 2 : 1,
             exec_mode: process.env.NODE_ENV === 'production' ? 'cluster' : 'fork',
             watch: false,
             max_memory_restart: '512M',
