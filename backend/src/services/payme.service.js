@@ -93,7 +93,32 @@ class PaymeService {
         if (order.paymentStatus === 'paid') return { error: { code: -31051, message: { uz: "Allaqachon to'langan" } }, id };
         if (order.status === 'cancelled') return { error: { code: -31099, message: { uz: 'Bekor qilingan' } }, id };
         if (params.amount !== order.total * 100) return { error: { code: -31001, message: { uz: "Noto'g'ri summa" } }, id };
-        return { result: { allow: true }, id };
+
+        // Fiskal chek uchun detail object
+        const detail = {
+            receipt_type: 0,
+            items: order.items.map(item => {
+                const entry = {
+                    title: item.productName,
+                    price: item.price * 100,   // tiyinda
+                    count: item.qty,
+                    code: item.mxikCode || '',
+                    package_code: item.packageCode || '',
+                    vat_percent: item.vatPercent ?? 12,
+                };
+                return entry;
+            }),
+        };
+
+        // Yetkazib berish xarajati bo'lsa
+        if (order.deliveryCost > 0) {
+            detail.shipping = {
+                title: 'Yetkazib berish',
+                price: order.deliveryCost * 100,
+            };
+        }
+
+        return { result: { allow: true, detail }, id };
     }
 
     // ─── CreateTransaction ───

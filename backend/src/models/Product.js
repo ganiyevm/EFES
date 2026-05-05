@@ -28,6 +28,11 @@ const productSchema = new mongoose.Schema({
     isPopular: { type: Boolean, default: false },
     imageUrl: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
+
+    // Soliq (fiskal chek) uchun
+    mxikCode: { type: String, default: '' },       // ИКПУ / MXIK kodi
+    packageCode: { type: String, default: '' },    // O'lchov birligi kodi (tasnif.soliq.uz)
+    vatPercent: { type: Number, default: 12 },     // QQS foizi (odatda 12%)
 }, {
     timestamps: true,
 });

@@ -34,7 +34,7 @@ const CATEGORIES = [
     { key: 'set_menu', label: '🍱 Set menyu' }, { key: 'other', label: 'Boshqa' },
 ];
 
-const EMPTY = { name: '', category: 'other', price: '', weight: '', calories: '', prepTime: '15', ingredients: '', description: { uz: '', ru: '' }, isSpicy: false, isVegetarian: false, isPopular: false, imageUrl: '' };
+const EMPTY = { name: '', category: 'other', price: '', weight: '', calories: '', prepTime: '15', ingredients: '', description: { uz: '', ru: '' }, isSpicy: false, isVegetarian: false, isPopular: false, imageUrl: '', mxikCode: '', packageCode: '', vatPercent: '12' };
 
 export default function ProductsList() {
     const [products, setProducts] = useState([]);
@@ -63,7 +63,7 @@ export default function ProductsList() {
 
     const openAdd = () => { setForm(EMPTY); setModal('add'); };
     const openEdit = (p) => {
-        setForm({ ...EMPTY, ...p, price: p.price || '', calories: p.calories || '', prepTime: p.prepTime || '15', weight: p.weight || '', description: p.description || { uz: '', ru: '' } });
+        setForm({ ...EMPTY, ...p, price: p.price || '', calories: p.calories || '', prepTime: p.prepTime || '15', weight: p.weight || '', description: p.description || { uz: '', ru: '' }, mxikCode: p.mxikCode || '', packageCode: p.packageCode || '', vatPercent: String(p.vatPercent ?? 12) });
         setModal(p);
     };
 
@@ -71,7 +71,7 @@ export default function ProductsList() {
         if (!form.name.trim() || !form.price) { alert('Nomi va narxi kerak'); return; }
         setSaving(true);
         try {
-            const payload = { ...form, price: parseInt(form.price), calories: parseInt(form.calories) || 0, prepTime: parseInt(form.prepTime) || 15 };
+            const payload = { ...form, price: parseInt(form.price), calories: parseInt(form.calories) || 0, prepTime: parseInt(form.prepTime) || 15, vatPercent: parseInt(form.vatPercent) || 12 };
             if (modal === 'add') {
                 await api.post('/products', payload);
             } else {
@@ -275,6 +275,26 @@ export default function ProductsList() {
                             <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                 <label className="form-label">Tavsif (Ruscha)</label>
                                 <textarea className="form-input" value={form.description?.ru} onChange={e => setDesc('ru', e.target.value)} placeholder="Описание блюда..." rows={2} />
+                            </div>
+                            <div style={{ gridColumn: 'span 2', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                                <label className="form-label" style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 }}>Soliq ma'lumotlari (Payme fiskal chek)</label>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">MXIK kodi (ИКПУ)</label>
+                                <input className="form-input" value={form.mxikCode} onChange={e => setField('mxikCode', e.target.value)} placeholder="00702001001000001" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">O'lchov birligi kodi</label>
+                                <input className="form-input" value={form.packageCode} onChange={e => setField('packageCode', e.target.value)} placeholder="123456" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">QQS foizi (%)</label>
+                                <input className="form-input" type="number" value={form.vatPercent} onChange={e => setField('vatPercent', e.target.value)} placeholder="12" min="0" max="100" />
+                            </div>
+                            <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
+                                <a href="https://tasnif.soliq.uz" target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', textDecoration: 'none' }}>
+                                    🔗 tasnif.soliq.uz da tekshirish
+                                </a>
                             </div>
                             <div style={{ gridColumn: 'span 2', display: 'flex', gap: 20 }}>
                                 <CheckboxField label="🌶 Achchiq" checked={form.isSpicy} onChange={v => setField('isSpicy', v)} />

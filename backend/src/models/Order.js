@@ -6,7 +6,11 @@ const orderItemSchema = new mongoose.Schema({
     productName: { type: String, default: '' },
     price: { type: Number, default: 0 },
     qty: { type: Number, default: 1 },
-    note: { type: String, default: '' },   // Maxsus talablar: "achchiqlisiz", "ko'p sous"
+    note: { type: String, default: '' },
+    // Fiskal chek uchun snapshot (buyurtma vaqtidagi qiymatlar)
+    mxikCode: { type: String, default: '' },
+    packageCode: { type: String, default: '' },
+    vatPercent: { type: Number, default: 12 },
 }, { _id: false });
 
 const statusHistorySchema = new mongoose.Schema({

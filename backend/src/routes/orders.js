@@ -67,6 +67,9 @@ router.post('/', authTelegram, async (req, res) => {
                 price: product.price,
                 qty,
                 note: item.note || '',
+                mxikCode: product.mxikCode || '',
+                packageCode: product.packageCode || '',
+                vatPercent: product.vatPercent ?? 12,
             });
         }
 
