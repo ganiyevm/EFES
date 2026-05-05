@@ -16,6 +16,7 @@ const userSchema = new mongoose.Schema({
     isProfileComplete: { type: Boolean, default: false },
     otpCode: { type: String, default: '' },
     otpExpiry: { type: Date, default: null },
+    otpSentAt: { type: Date, default: null },
     language: {
         type: String,
         enum: ['uz', 'ru', 'en'],

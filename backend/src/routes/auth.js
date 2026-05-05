@@ -98,24 +98,30 @@ router.post('/send-otp', async (req, res) => {
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Telefon raqami kerak' });
 
-        // Telefon formatini normallashtirish
+        // Telefon formati: +998XXXXXXXXX
         const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+        if (!/^\+998\d{9}$/.test(normalizedPhone)) {
+            return res.status(400).json({ error: "Telefon formati noto'g'ri: +998XXXXXXXXX" });
+        }
 
         const user = await User.findById(decoded.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
-        // Rate limit: 60 soniyada bir marotaba yuborish mumkin
-        if (user.otpExpiry && user.otpExpiry > new Date(Date.now() - 4 * 60 * 1000)) {
-            const waitSec = Math.ceil((user.otpExpiry - (Date.now() - 4 * 60 * 1000)) / 1000);
+        // Rate limit: so'nggi OTP yuborilganidan 60 soniya o'tishi kerak
+        const OTP_COOLDOWN_MS = 60 * 1000;
+        if (user.otpSentAt && (Date.now() - user.otpSentAt.getTime()) < OTP_COOLDOWN_MS) {
+            const waitSec = Math.ceil((OTP_COOLDOWN_MS - (Date.now() - user.otpSentAt.getTime())) / 1000);
             return res.status(429).json({ error: `Iltimos, ${waitSec} soniya kuting` });
         }
 
-        // 6 xonali OTP
+        // 6 xonali OTP — hash qilib saqlanadi
         const code = String(Math.floor(100000 + Math.random() * 900000));
         const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 daqiqa
+        const hashedCode = await bcrypt.hash(code, 8);
 
-        user.otpCode = code;
+        user.otpCode = hashedCode;
         user.otpExpiry = expiry;
+        user.otpSentAt = new Date();
         await user.save();
 
         if (process.env.SMS_EMAIL && process.env.SMS_PASSWORD) {
@@ -160,11 +166,12 @@ router.post('/verify-otp', async (req, res) => {
         const user = await User.findById(decoded.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
-        if (!user.otpCode || user.otpCode !== String(code).trim()) {
-            return res.status(400).json({ error: "Kod noto'g'ri" });
-        }
         if (!user.otpExpiry || new Date() > user.otpExpiry) {
             return res.status(400).json({ error: 'Kod muddati tugagan. Qayta yuboring.' });
+        }
+        const isCodeValid = user.otpCode && await bcrypt.compare(String(code).trim(), user.otpCode);
+        if (!isCodeValid) {
+            return res.status(400).json({ error: "Kod noto'g'ri" });
         }
 
         const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;

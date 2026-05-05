@@ -89,9 +89,16 @@ router.get('/admin/list', async (req, res) => {
     }
 });
 
+function pickPromoFields(body) {
+    const { title, description, imageUrl, discountType, discountValue, maxDiscount,
+            minOrderAmount, promoCode, startDate, endDate, isActive, sortOrder, usageLimit } = body;
+    return { title, description, imageUrl, discountType, discountValue, maxDiscount,
+             minOrderAmount, promoCode, startDate, endDate, isActive, sortOrder, usageLimit };
+}
+
 router.post('/admin', async (req, res) => {
     try {
-        const promo = await Promotion.create(req.body);
+        const promo = await Promotion.create(pickPromoFields(req.body));
         res.status(201).json(promo);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -100,7 +107,7 @@ router.post('/admin', async (req, res) => {
 
 router.put('/admin/:id', async (req, res) => {
     try {
-        const promo = await Promotion.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+        const promo = await Promotion.findByIdAndUpdate(req.params.id, pickPromoFields(req.body), { new: true, runValidators: true });
         if (!promo) return res.status(404).json({ error: 'Topilmadi' });
         res.json(promo);
     } catch (err) {

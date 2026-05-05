@@ -105,9 +105,11 @@ docker-compose up -d
 
 ## Admin kirish
 
+Birinchi admin `ADMIN_INIT_PASSWORD` env variable orqali yaratiladi.
+Railway yoki `.env` faylida quyidagini sozlang:
+
 ```
-Login: admin
-Parol: efes2026
+ADMIN_INIT_PASSWORD=<kuchli_parol_shu_yerga>
 ```
 
 ## 🔄 Buyurtma oqimi

@@ -13,6 +13,11 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // ─── Security ───
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+}));
+
 app.use((req, res, next) => {
     res.removeHeader('X-Frame-Options');
     res.setHeader('Content-Security-Policy',
@@ -21,12 +26,19 @@ app.use((req, res, next) => {
     next();
 });
 
+const DEFAULT_ORIGINS = [
+    'https://efes-app-production.up.railway.app',
+    'https://web.telegram.org',
+    'https://telegram.org',
+];
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+const EFFECTIVE_ORIGINS = ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : DEFAULT_ORIGINS;
+
 app.use(cors({
     origin: (origin, cb) => {
-        // Bot WebApp va server-to-server (origin yo'q) har doim o'tadi
+        // Server-to-server (webhook, Payme, Click) — origin yo'q
         if (!origin) return cb(null, true);
-        if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+        if (EFFECTIVE_ORIGINS.some(o => origin === o || origin.endsWith('.railway.app'))) return cb(null, true);
         cb(new Error('CORS: ruxsat etilmagan origin'));
     },
     credentials: true,
@@ -76,8 +88,8 @@ app.post('/api/admin/emergency-reset', async (req, res) => {
         if (!RESET_SECRET || secret !== RESET_SECRET) {
             return res.status(403).json({ error: 'Noto\'g\'ri maxfiy kalit' });
         }
-        if (!username || !newPassword || newPassword.length < 4) {
-            return res.status(400).json({ error: 'username va newPassword (min 4 ta belgi) kerak' });
+        if (!username || !newPassword || newPassword.length < 8) {
+            return res.status(400).json({ error: 'username va newPassword (min 8 ta belgi) kerak' });
         }
         const bcrypt = require('bcryptjs');
         const AdminAccount = require('./src/models/AdminAccount');

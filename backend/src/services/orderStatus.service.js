@@ -22,8 +22,11 @@ class OrderStatusService {
             order.deliveredAt = order.deliveredAt || new Date();
             if (order.paymentMethod === 'cash') order.paymentStatus = 'paid';
 
-            const user = await User.findById(order.user);
-            if (user) await BonusService.earnBonus(user, order);
+            // Bonus faqat bir marta qo'shiladi
+            if (!order.bonusEarned || order.bonusEarned === 0) {
+                const user = await User.findById(order.user);
+                if (user) await BonusService.earnBonus(user, order);
+            }
 
             if (!wasDelivered && order.courierId) {
                 const courier = await Courier.findById(order.courierId);

@@ -97,9 +97,9 @@ export default function Payment() {
 
     // ── Pending ──
     const providerName = method === 'payme' ? 'Payme' : 'Click';
-    const payUrl = payUrlFromServer || (method === 'payme'
-        ? `https://checkout.paycom.uz/${import.meta.env.VITE_PAYME_ID}?amount=${total * 100}&order=${orderId}`
-        : `https://my.click.uz/services/pay?service_id=${import.meta.env.VITE_CLICK_SERVICE_ID}&merchant_id=${import.meta.env.VITE_CLICK_MERCHANT_ID}&amount=${total}&transaction_param=${orderNum}`);
+    // payUrlFromServer — backend tomonidan generatsiya qilingan URL (to'g'ri format)
+    // Fallback faqat server URL bo'lmagan holda ishlatiladi
+    const payUrl = payUrlFromServer || null;
 
     return (
         <div style={pageStyle}>
@@ -125,12 +125,18 @@ export default function Payment() {
             </div>
 
             {/* Open payment */}
-            <a href={payUrl} target="_blank" rel="noreferrer" style={{
-                ...goldBtnStyle, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 8, textDecoration: 'none', marginBottom: 10,
-            }}>
-                💳 {providerName} orqali to'lash
-            </a>
+            {payUrl ? (
+                <a href={payUrl} target="_blank" rel="noreferrer" style={{
+                    ...goldBtnStyle, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 8, textDecoration: 'none', marginBottom: 10,
+                }}>
+                    💳 {providerName} orqali to'lash
+                </a>
+            ) : (
+                <div style={{ color: '#e74c3c', fontSize: 13, marginBottom: 10, textAlign: 'center' }}>
+                    To'lov havolasi yuklanmadi. Qayta urinib ko'ring.
+                </div>
+            )}
 
             <button onClick={handleManualConfirm} disabled={checking} style={{ ...secondaryBtnStyle, marginBottom: 10 }}>
                 {checking ? `⏳ ${t('confirmingPayment')}` : `✅ ${t('confirmPayment')}`}

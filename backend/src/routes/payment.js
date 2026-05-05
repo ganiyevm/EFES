@@ -62,6 +62,9 @@ router.get('/click/check/:orderId', authTelegram, async (req, res) => {
     try {
         const order = await Order.findById(req.params.orderId);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (String(order.user) !== String(req.user.userId)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
 
         if (order.paymentStatus === 'paid') {
             return res.json({ paid: true, source: 'db' });
@@ -101,6 +104,9 @@ router.get('/payme/check/:orderId', authTelegram, async (req, res) => {
     try {
         const order = await Order.findById(req.params.orderId);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (String(order.user) !== String(req.user.userId)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
 
         if (order.paymentStatus === 'paid') return res.json({ paid: true, source: 'db' });
         if (order.paymeState === 2) return res.json({ paid: true, source: 'payme_state' });
@@ -121,9 +127,12 @@ router.get('/payme/check/:orderId', authTelegram, async (req, res) => {
 router.get('/status/:orderId', authTelegram, async (req, res) => {
     try {
         const order = await Order.findById(req.params.orderId)
-            .select('orderNumber status paymentStatus paymentMethod total bonusEarned')
+            .select('orderNumber status paymentStatus paymentMethod total bonusEarned user')
             .lean();
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (String(order.user) !== String(req.user.userId)) {
+            return res.status(403).json({ error: 'Ruxsat yo\'q' });
+        }
 
         res.json({
             orderNumber: order.orderNumber,

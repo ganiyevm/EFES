@@ -23,10 +23,17 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+function pickBranchFields(body) {
+    const { name, number, address, phone, isActive, location, deliveryRadius,
+            operatorChatId, operatorIds, workingHours } = body;
+    return { name, number, address, phone, isActive, location, deliveryRadius,
+             operatorChatId, operatorIds, workingHours };
+}
+
 // ─── Yangi filial (Admin) ───
 router.post('/', authAdmin, async (req, res) => {
     try {
-        const branch = await Branch.create(req.body);
+        const branch = await Branch.create(pickBranchFields(req.body));
         res.status(201).json(branch);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -36,7 +43,7 @@ router.post('/', authAdmin, async (req, res) => {
 // ─── Tahrirlash (Admin) ───
 router.put('/:id', authAdmin, async (req, res) => {
     try {
-        const branch = await Branch.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const branch = await Branch.findByIdAndUpdate(req.params.id, pickBranchFields(req.body), { new: true });
         if (!branch) return res.status(404).json({ error: 'Filial topilmadi' });
         res.json(branch);
     } catch (err) {

@@ -259,9 +259,15 @@ router.patch('/orders/:id/status', async (req, res) => {
         if (status === 'confirmed' && prevStatus !== 'confirmed' && !order.courierId) {
             CourierBotService.broadcastNewOrder(order).catch(e => console.error('Courier broadcast:', e.message));
         }
-        // Bekor qilinsa — broadcast xabarlarini tozalash
-        if ((status === 'cancelled' || status === 'rejected') && order.courierBroadcasts?.length) {
-            CourierBotService.clearBroadcasts(order._id).catch(() => {});
+        // Bekor qilinsa — broadcast tozalash + promo counter qaytarish
+        if (status === 'cancelled' || status === 'rejected') {
+            if (order.courierBroadcasts?.length) {
+                CourierBotService.clearBroadcasts(order._id).catch(() => {});
+            }
+            if (order.appliedPromo && prevStatus !== 'cancelled' && prevStatus !== 'rejected') {
+                const Promotion = require('../models/Promotion');
+                await Promotion.findByIdAndUpdate(order.appliedPromo, { $inc: { usageCount: -1 } });
+            }
         }
 
         res.json(order);
@@ -355,21 +361,21 @@ router.get('/accounts', async (req, res) => {
 router.post('/accounts', authSuperAdmin, async (req, res) => {
     try {
         const { username, password, role } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'username va password kerak' });
+        if (password.length < 8) return res.status(400).json({ error: 'Parol kamida 8 ta belgi bo\'lishi kerak' });
         // faqat super_admin boshqa super_admin yarata oladi
         if (role === 'super_admin' && req.admin.role !== 'super_admin') {
             return res.status(403).json({ error: 'Super admin faqat super admin tomonidan yaratilishi mumkin' });
         }
         const hashed = await bcrypt.hash(password, 10);
-        const account = await AdminAccount.create({ username, password: hashed, role });
-        res.status(201).json({ id: account._id, username, role });
+        const account = await AdminAccount.create({ username, password: hashed, role: role || 'admin' });
+        res.status(201).json({ id: account._id, username, role: account.role });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
 });
 
-// ─── Rol o'zgartirish ───
-// Agar super_admin mavjud bo'lmasa — istalgan admin o'zini promote qila oladi
-// Agar super_admin mavjud bo'lsa — faqat super_admin boshqasini o'zgartira oladi
+// ─── Rol o'zgartirish (faqat super_admin) ───
 router.put('/accounts/:id/role', async (req, res) => {
     try {
         const { role } = req.body;
@@ -377,15 +383,10 @@ router.put('/accounts/:id/role', async (req, res) => {
             return res.status(400).json({ error: 'Noto\'g\'ri rol' });
         }
 
-        const superAdminExists = await AdminAccount.findOne({ role: 'super_admin' });
-        const requesterId = req.admin?.adminId;
-
-        if (superAdminExists) {
-            if (req.admin?.role !== 'super_admin') {
-                return res.status(403).json({ error: 'Faqat super admin rol o\'zgartira oladi' });
-            }
+        // Har doim faqat super_admin rol o'zgartira oladi
+        if (req.admin?.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Faqat super admin rol o\'zgartira oladi' });
         }
-        // super_admin yo'q bo'lsa — istalgan admin o'zini promote qila oladi (bootstrap)
 
         const account = await AdminAccount.findByIdAndUpdate(
             req.params.id,
@@ -404,8 +405,8 @@ router.put('/accounts/:id/role', async (req, res) => {
 router.put('/accounts/:id/password', async (req, res) => {
     try {
         const { newPassword } = req.body;
-        if (!newPassword || newPassword.length < 4) {
-            return res.status(400).json({ error: 'Parol kamida 4 ta belgi bo\'lishi kerak' });
+        if (!newPassword || newPassword.length < 8) {
+            return res.status(400).json({ error: 'Parol kamida 8 ta belgi bo\'lishi kerak' });
         }
 
         const targetId = req.params.id;
