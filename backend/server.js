@@ -81,7 +81,7 @@ app.use('/api/couriers', require('./src/routes/couriers'));
 app.use('/api/operators', require('./src/routes/operators'));
 
 // ─── Emergency parol tiklash (ADMIN_RESET_SECRET orqali) ───
-app.post('/api/admin/emergency-reset', async (req, res) => {
+app.post('/api/emergency-reset', async (req, res) => {
     try {
         const { secret, username, newPassword } = req.body;
         const RESET_SECRET = process.env.ADMIN_RESET_SECRET;
