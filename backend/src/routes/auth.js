@@ -55,6 +55,13 @@ router.post('/telegram', async (req, res) => {
             return res.status(401).json({ error: 'Yaroqsiz initData' });
         }
 
+        // auth_date freshness — initData replay attack himoyasi
+        const authDate = parseInt(params.get('auth_date'), 10);
+        const MAX_AGE_SEC = 24 * 60 * 60; // 24 soat — Telegram WebApp uchun standart
+        if (!authDate || (Math.floor(Date.now() / 1000) - authDate) > MAX_AGE_SEC) {
+            return res.status(401).json({ error: 'initData muddati tugagan. Mini App ni qayta oching.' });
+        }
+
         // User ma'lumotlarini olish
         const userData = JSON.parse(params.get('user'));
         const { id: telegramId, first_name, last_name, username } = userData;
@@ -84,44 +91,6 @@ router.post('/telegram', async (req, res) => {
         res.json({ token: accessToken, refreshToken, user });
     } catch (err) {
         console.error('Auth error:', err);
-        res.status(500).json({ error: 'Server xatosi' });
-    }
-});
-
-// ─── Admin Login ───
-router.post('/admin/login', async (req, res) => {
-    try {
-        const { username, password } = req.body;
-
-        let admin = await AdminAccount.findOne({ username });
-
-        // Birinchi marta — default admin yaratish (faqat ADMIN_INIT_PASSWORD env orqali)
-        const initPassword = process.env.ADMIN_INIT_PASSWORD;
-        if (!admin && username === 'admin' && initPassword && password === initPassword) {
-            const hashed = await bcrypt.hash(initPassword, 10);
-            admin = await AdminAccount.create({ username: 'admin', password: hashed, role: 'super_admin' });
-            console.log('[ADMIN INIT] Birinchi admin yaratildi');
-        }
-
-        if (!admin) return res.status(401).json({ error: 'Login yoki parol noto\'g\'ri' });
-
-        const isMatch = await bcrypt.compare(password, admin.password);
-        if (!isMatch) return res.status(401).json({ error: 'Login yoki parol noto\'g\'ri' });
-
-        const token = jwt.sign(
-            { adminId: admin._id, role: admin.role },
-            process.env.ADMIN_JWT_SECRET,
-            { expiresIn: '7d' }
-        );
-
-        const adminToken = jwt.sign(
-            { adminId: admin._id, username: admin.username, role: admin.role },
-            process.env.ADMIN_JWT_SECRET,
-            { expiresIn: '7d' }
-        );
-        res.json({ token: adminToken, admin: { id: admin._id, username: admin.username, role: admin.role } });
-    } catch (err) {
-        console.error('Admin login error:', err);
         res.status(500).json({ error: 'Server xatosi' });
     }
 });

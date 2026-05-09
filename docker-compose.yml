@@ -4,10 +4,17 @@ services:
   mongodb:
     image: mongo:7
     container_name: efes-mongo
-    ports:
-      - "27017:27017"
+    # MongoDB faqat ichki Docker tarmog'ida — tashqi portga chiqarilmaydi.
+    # Local debug uchun: ports: - "127.0.0.1:27017:27017"
+    expose:
+      - "27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   backend:
@@ -19,7 +26,8 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/efes_delivery
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     restart: always
 
   frontend:
@@ -49,7 +57,8 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/efes_delivery
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
       - backend
     restart: always
 

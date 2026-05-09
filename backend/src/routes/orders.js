@@ -25,6 +25,7 @@ router.post('/', authTelegram, async (req, res) => {
         const { items, branch, deliveryType, address, addressLat, addressLng, paymentMethod, phone, extraPhone, bonusDiscount = 0, notes, promoCode } = req.body;
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+        if (user.isBlocked) return res.status(403).json({ error: 'Hisobingiz bloklangan. Admin bilan bog\'laning.' });
 
         // Yetkazib berish radiusi tekshiruvi
         if (deliveryType === 'delivery' && addressLat && addressLng) {

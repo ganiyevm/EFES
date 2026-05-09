@@ -21,6 +21,7 @@ export function AuthProvider({ children }) {
                 tg.expand();
                 const { data } = await api.post('/auth/telegram', { initData: tg.initData });
                 localStorage.setItem('efes_token', data.token);
+                if (data.refreshToken) localStorage.setItem('efes_refresh_token', data.refreshToken);
                 setUser(data.user);
             } else {
                 // Development mode
@@ -33,6 +34,7 @@ export function AuthProvider({ children }) {
         } catch (err) {
             console.error('Auth error:', err);
             localStorage.removeItem('efes_token');
+            localStorage.removeItem('efes_refresh_token');
         } finally {
             setLoading(false);
         }

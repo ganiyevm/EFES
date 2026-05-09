@@ -5,7 +5,27 @@ const Product = require('../models/Product');
 const ImportLog = require('../models/ImportLog');
 const { authAdmin } = require('../middleware/auth');
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const ALLOWED_MIMETYPES = new Set([
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
+    'application/octet-stream', // ba'zi browserlar
+]);
+const ALLOWED_EXTS = ['.xlsx', '.xls'];
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, cb) => {
+        const ext = (file.originalname.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+        if (!ALLOWED_EXTS.includes(ext)) {
+            return cb(new Error('Faqat .xlsx yoki .xls fayllar qabul qilinadi'));
+        }
+        if (!ALLOWED_MIMETYPES.has(file.mimetype)) {
+            return cb(new Error('Yaroqsiz fayl turi'));
+        }
+        cb(null, true);
+    },
+});
 
 router.use(authAdmin);
 
@@ -14,7 +34,7 @@ router.post('/excel', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: 'Fayl topilmadi' });
 
-        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer', cellHTML: false, cellFormula: false });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = xlsx.utils.sheet_to_json(sheet);
 

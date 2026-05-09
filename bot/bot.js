@@ -16,6 +16,7 @@ mongoose.connect(MONGODB_URI)
 const User = require('./src/models/User');
 const Order = require('./src/models/Order');
 const Branch = require('./src/models/Branch');
+const Operator = require('./src/models/Operator');
 const OrderStatusService = require('./src/services/orderStatus.service');
 const CourierBotService = require('./src/services/courierBot.service');
 const TelegramService = require('./src/services/telegram.service');
@@ -272,25 +273,41 @@ async function handleStart(msg) {
     }
 
     // Deep link: /start op_BRANCHID — operator registration
+    // Faqat admin oldindan Operator collection'ga qo'shgan telegramId lar ulana oladi
     if (payload.startsWith('op_')) {
         const branchId = payload.replace('op_', '');
         try {
-            const branch = await Branch.findById(branchId);
-            if (branch) {
-                branch.operatorChatId = from.id;
-                if (!branch.operatorIds) branch.operatorIds = [];
-                if (!branch.operatorIds.includes(from.id)) branch.operatorIds.push(from.id);
-                await branch.save();
-                await sendMessage(chatId,
-                    `✅ Siz <b>${branch.name || `Filial #${branch.number}`}</b> filiali operatori sifatida ulandi!\n\n` +
-                    `Endi yangi buyurtmalar sizga yuboriladi. 🔔`
-                );
-            } else {
-                await sendMessage(chatId, '❌ Filial topilmadi. Admin bilan bog\'laning.');
+            // Mongoose ObjectId formatini tekshirish
+            if (!mongoose.Types.ObjectId.isValid(branchId)) {
+                await sendMessage(chatId, '❌ Yaroqsiz havola.');
+                return;
             }
+            const operator = await Operator.findOne({
+                telegramId: from.id,
+                branch: branchId,
+                isBlocked: { $ne: true },
+                isActive: { $ne: false },
+            });
+            if (!operator) {
+                await sendMessage(chatId, '❌ Sizga ruxsat berilmagan. Admin bilan bog\'laning.');
+                return;
+            }
+            const branch = await Branch.findById(branchId);
+            if (!branch) {
+                await sendMessage(chatId, '❌ Filial topilmadi.');
+                return;
+            }
+            branch.operatorChatId = from.id;
+            if (!branch.operatorIds) branch.operatorIds = [];
+            if (!branch.operatorIds.includes(from.id)) branch.operatorIds.push(from.id);
+            await branch.save();
+            await sendMessage(chatId,
+                `✅ Siz <b>${branch.name || `Filial #${branch.number}`}</b> filiali operatori sifatida ulandi!\n\n` +
+                `Endi yangi buyurtmalar sizga yuboriladi. 🔔`
+            );
         } catch (e) {
             console.error('Operator registration error:', e.message);
-            await sendMessage(chatId, '❌ Xatolik yuz berdi. Qaytadan urinib ko\'ring.');
+            await sendMessage(chatId, '❌ Xatolik yuz berdi.');
         }
         return;
     }

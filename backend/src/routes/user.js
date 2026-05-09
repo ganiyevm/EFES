@@ -35,7 +35,23 @@ router.post('/address', authTelegram, async (req, res) => {
     try {
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
-        user.addresses.push(req.body);
+
+        const { title, address, lat, lng } = req.body;
+        if (!title || !address) {
+            return res.status(400).json({ error: 'title va address kerak' });
+        }
+        if (String(title).length > 100 || String(address).length > 500) {
+            return res.status(400).json({ error: 'Juda uzun matn' });
+        }
+        if (user.addresses.length >= 20) {
+            return res.status(400).json({ error: 'Maksimal 20 ta manzil saqlash mumkin' });
+        }
+        user.addresses.push({
+            title: String(title).trim(),
+            address: String(address).trim(),
+            lat: lat !== undefined ? Number(lat) : undefined,
+            lng: lng !== undefined ? Number(lng) : undefined,
+        });
         await user.save();
         res.json(user.addresses);
     } catch (err) {
@@ -48,7 +64,12 @@ router.delete('/address/:index', authTelegram, async (req, res) => {
     try {
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
-        user.addresses.splice(parseInt(req.params.index), 1);
+
+        const idx = parseInt(req.params.index, 10);
+        if (isNaN(idx) || idx < 0 || idx >= user.addresses.length) {
+            return res.status(400).json({ error: 'Yaroqsiz manzil indeksi' });
+        }
+        user.addresses.splice(idx, 1);
         await user.save();
         res.json(user.addresses);
     } catch (err) {

@@ -38,7 +38,7 @@ app.use(cors({
     origin: (origin, cb) => {
         // Server-to-server (webhook, Payme, Click) — origin yo'q
         if (!origin) return cb(null, true);
-        if (EFFECTIVE_ORIGINS.some(o => origin === o || origin.endsWith('.railway.app'))) return cb(null, true);
+        if (EFFECTIVE_ORIGINS.includes(origin)) return cb(null, true);
         cb(new Error('CORS: ruxsat etilmagan origin'));
     },
     credentials: true,
@@ -52,17 +52,32 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Strict limiter for sensitive endpoints (emergency-reset, click webhooks)
+const strictLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    message: { error: 'Juda ko\'p urinish. 1 soatdan keyin qayta urinib ko\'ring.' },
+    skipSuccessfulRequests: false,
+});
+const clickLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: { error: 'Click rate limit' },
+});
+
 // ─── Body Parser ───
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Request logger (Payment debug) ───
-app.use((req, res, next) => {
-    if (req.path.includes('click') || req.path.includes('payme')) {
-        console.log(`[REQ] ${req.method} ${req.path} | IP: ${req.ip} | Body: ${JSON.stringify(req.body)}`);
-    }
-    next();
-});
+// ─── Request logger (faqat development) ───
+if (process.env.NODE_ENV !== 'production') {
+    app.use((req, res, next) => {
+        if (req.path.includes('click') || req.path.includes('payme')) {
+            console.log(`[REQ] ${req.method} ${req.path} | IP: ${req.ip}`);
+        }
+        next();
+    });
+}
 
 // ─── Routes ───
 app.use('/api/auth', require('./src/routes/auth'));
@@ -81,7 +96,7 @@ app.use('/api/couriers', require('./src/routes/couriers'));
 app.use('/api/operators', require('./src/routes/operators'));
 
 // ─── Emergency parol tiklash (ADMIN_RESET_SECRET orqali) ───
-app.post('/api/emergency-reset', async (req, res) => {
+app.post('/api/emergency-reset', strictLimiter, async (req, res) => {
     try {
         const { secret, username, newPassword } = req.body;
         const RESET_SECRET = process.env.ADMIN_RESET_SECRET;
@@ -148,11 +163,11 @@ app.post('/bot-webhook', (req, res) => {
 
 // ─── Click webhook aliases ───
 const ClickService = require('./src/services/click.service');
-app.post('/click/prepare', async (req, res) => {
+app.post('/click/prepare', clickLimiter, async (req, res) => {
     const result = await ClickService.prepare(req.body);
     res.json(result);
 });
-app.post('/click/complete', async (req, res) => {
+app.post('/click/complete', clickLimiter, async (req, res) => {
     const result = await ClickService.complete(req.body);
     res.json(result);
 });

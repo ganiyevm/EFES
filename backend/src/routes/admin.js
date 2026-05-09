@@ -11,6 +11,11 @@ const OrderStatusService = require('../services/orderStatus.service');
 const bcrypt = require('bcryptjs');
 const { authAdmin, authSuperAdmin } = require('../middleware/auth');
 
+const MAX_PAGE_SIZE = 100;
+const safeLimit = (n) => Math.min(Math.max(parseInt(n) || 20, 1), MAX_PAGE_SIZE);
+const safePage = (n) => Math.max(parseInt(n) || 1, 1);
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // ─── Login (ochiq route — authAdmin dan oldin) ───
 router.post('/login', async (req, res) => {
     try {
@@ -166,21 +171,23 @@ router.get('/recent-orders', async (req, res) => {
 // ─── Buyurtmalar (Admin) ───
 router.get('/orders', async (req, res) => {
     try {
-        const { status, page = 1, limit = 20, branch } = req.query;
+        const { status, branch } = req.query;
+        const page = safePage(req.query.page);
+        const limit = safeLimit(req.query.limit);
         const filter = {};
         if (status) filter.status = status;
         if (branch) filter.branch = branch;
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const skip = (page - 1) * limit;
         const [orders, total] = await Promise.all([
             Order.find(filter)
                 .populate('branch', 'name number')
                 .populate('courierId', 'name phone carPlate')
-                .sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+                .sort({ createdAt: -1 }).skip(skip).limit(limit),
             Order.countDocuments(filter),
         ]);
 
-        res.json({ orders, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+        res.json({ orders, total, page, pages: Math.ceil(total / limit) });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -246,12 +253,23 @@ router.patch('/orders/:id/assign-courier', async (req, res) => {
 // ─── Buyurtma statusini o'zgartirish ───
 router.patch('/orders/:id/status', async (req, res) => {
     try {
-        const { status, note } = req.body;
+        const { status, note, force } = req.body;
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
 
         const prevStatus = order.status;
-        await OrderStatusService.applyTransition(order, status, { changedBy: 'admin', note: note || '' });
+        try {
+            await OrderStatusService.applyTransition(order, status, {
+                changedBy: 'admin',
+                note: note || '',
+                force: force === true && req.admin?.role === 'super_admin',
+            });
+        } catch (e) {
+            if (e.code === 'INVALID_TRANSITION') {
+                return res.status(400).json({ error: e.message });
+            }
+            throw e;
+        }
 
         TelegramService.notifyCustomerStatus(order, { note: note || '' }).catch(() => {});
 
@@ -299,18 +317,20 @@ router.get('/branches', async (req, res) => {
 // ─── Foydalanuvchilar (Admin) ───
 router.get('/users', async (req, res) => {
     try {
-        const { page = 1, limit = 20, search } = req.query;
+        const { search } = req.query;
+        const page = safePage(req.query.page);
+        const limit = safeLimit(req.query.limit);
         const filter = {};
         if (search) {
-            const regex = new RegExp(search, 'i');
+            const regex = new RegExp(escapeRegex(search), 'i');
             filter.$or = [{ firstName: regex }, { lastName: regex }, { phone: regex }, { username: regex }];
         }
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const skip = (page - 1) * limit;
         const [users, total] = await Promise.all([
-            User.find(filter).sort({ lastActiveAt: -1 }).skip(skip).limit(parseInt(limit)),
+            User.find(filter).sort({ lastActiveAt: -1 }).skip(skip).limit(limit),
             User.countDocuments(filter),
         ]);
-        res.json({ users, total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) });
+        res.json({ users, total, page, pages: Math.ceil(total / limit) });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Order = require('../models/Order');
 const BonusTransaction = require('../models/BonusTransaction');
 
 class BonusService {
@@ -8,17 +9,31 @@ class BonusService {
         return Math.floor(amount / 10000) * 100;
     }
 
+    // Idempotent: bir buyurtma uchun faqat bir marta bonus beriladi.
+    // MongoDB atomik update bilan race condition oldini oladi.
     static async earnBonus(user, order) {
         const points = this.calculatePoints(order.total);
         if (points <= 0) return;
 
-        user.bonusPoints += points;
-        user.totalOrders += 1;
-        user.totalSpent += order.total;
-        await user.save();
-
+        // Atomik claim — bonusEarned 0 yoki yo'q bo'lsa, points'ga belgilaymiz.
+        // Bir vaqtning o'zida 2 ta call kelsa, faqat 1 tasi muvaffaqiyatli bo'ladi.
+        const claim = await Order.updateOne(
+            { _id: order._id, $or: [{ bonusEarned: { $exists: false } }, { bonusEarned: 0 }, { bonusEarned: null }] },
+            { $set: { bonusEarned: points } }
+        );
+        if (claim.modifiedCount === 0) {
+            return; // Allaqachon hisoblangan
+        }
         order.bonusEarned = points;
-        await order.save();
+
+        await User.updateOne(
+            { _id: user._id },
+            { $inc: { bonusPoints: points, totalOrders: 1, totalSpent: order.total } }
+        );
+        // user obyektini ham yangilab qo'yamiz
+        user.bonusPoints = (user.bonusPoints || 0) + points;
+        user.totalOrders = (user.totalOrders || 0) + 1;
+        user.totalSpent = (user.totalSpent || 0) + order.total;
 
         await BonusTransaction.create({
             user: user._id,
