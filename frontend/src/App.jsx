@@ -12,7 +12,6 @@ import Payment from './pages/Payment';
 import Branches from './pages/Branches';
 import Profile from './pages/Profile';
 import Orders from './pages/Orders';
-import Onboarding from './pages/Onboarding';
 import Promotions from './pages/Promotions';
 
 // Saqlangan mavzu (theme) ni boshlang'ich holatda qo'llash
@@ -47,11 +46,6 @@ function AppInner() {
         );
     }
 
-    // Yangi foydalanuvchi — telefon raqamini tasdiqlashi kerak
-    if (user && !user.isProfileComplete) {
-        return <Onboarding />;
-    }
-
     return (
         <CartProvider>
             <BrowserRouter>
@@ -66,7 +60,6 @@ function AppInner() {
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/orders" element={<Orders />} />
                     <Route path="/promotions" element={<Promotions />} />
-                    <Route path="/onboarding" element={<Navigate to="/" replace />} />
                 </Routes>
             </BrowserRouter>
         </CartProvider>

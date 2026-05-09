@@ -67,12 +67,14 @@ router.post('/telegram', async (req, res) => {
                 firstName: first_name || '',
                 lastName: last_name || '',
                 username: username || '',
+                isProfileComplete: true,
             });
         } else {
             user.firstName = first_name || user.firstName;
             user.lastName = last_name || user.lastName;
             user.username = username || user.username;
             user.lastActiveAt = new Date();
+            user.isProfileComplete = true;
             await user.save();
         }
 
@@ -82,113 +84,6 @@ router.post('/telegram', async (req, res) => {
         res.json({ token: accessToken, refreshToken, user });
     } catch (err) {
         console.error('Auth error:', err);
-        res.status(500).json({ error: 'Server xatosi' });
-    }
-});
-
-// ─── Send OTP via Telegram bot ───
-// Foydalanuvchi allaqachon JWT bilan autentifikatsiya qilingan (initData orqali).
-// Telefon raqamini tekshirish uchun Telegram bot orqali 6 xonali kod yuboriladi.
-router.post('/send-otp', async (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) return res.status(401).json({ error: 'Token kerak' });
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        const { phone } = req.body;
-        if (!phone) return res.status(400).json({ error: 'Telefon raqami kerak' });
-
-        // Telefon formati: +998XXXXXXXXX
-        const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
-        if (!/^\+998\d{9}$/.test(normalizedPhone)) {
-            return res.status(400).json({ error: "Telefon formati noto'g'ri: +998XXXXXXXXX" });
-        }
-
-        const user = await User.findById(decoded.userId);
-        if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
-
-        // Rate limit: so'nggi OTP yuborilganidan 60 soniya o'tishi kerak
-        const OTP_COOLDOWN_MS = 60 * 1000;
-        if (user.otpSentAt && (Date.now() - user.otpSentAt.getTime()) < OTP_COOLDOWN_MS) {
-            const waitSec = Math.ceil((OTP_COOLDOWN_MS - (Date.now() - user.otpSentAt.getTime())) / 1000);
-            return res.status(429).json({ error: `Iltimos, ${waitSec} soniya kuting` });
-        }
-
-        // 6 xonali OTP — hash qilib saqlanadi
-        const code = String(Math.floor(100000 + Math.random() * 900000));
-        const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 daqiqa
-        const hashedCode = await bcrypt.hash(code, 8);
-
-        user.otpCode = hashedCode;
-        user.otpExpiry = expiry;
-        user.otpSentAt = new Date();
-        await user.save();
-
-        if (process.env.SMS_EMAIL && process.env.SMS_PASSWORD) {
-            // Eskiz SMS orqali yuborish
-            const EskizService = require('../services/eskiz.service');
-            await EskizService.sendOtp(normalizedPhone, code);
-            res.json({ success: true, via: 'sms', message: "Kod SMS orqali yuborildi" });
-        } else {
-            // Fallback: Telegram bot orqali yuborish
-            const TelegramService = require('../services/telegram.service');
-            const text =
-                `🔐 <b>EFES Delivery — Tasdiqlash kodi</b>\n\n` +
-                `Telefon raqam: <b>${normalizedPhone}</b>\n\n` +
-                `Kod: <b>${code}</b>\n\n` +
-                `⏱ Kod 5 daqiqa davomida amal qiladi.\n` +
-                `Agar siz bu so'rovni yubormagan bo'lsangiz, e'tibor bermang.`;
-
-            const result = await TelegramService.sendMessage(user.telegramId, text);
-            if (!result?.ok) {
-                console.error('OTP Telegram xatosi:', result);
-                return res.status(500).json({ error: "Telegram orqali yuborib bo'lmadi. Bot bilan suhbatni boshlang." });
-            }
-            res.json({ success: true, via: 'telegram', message: "Kod Telegram botga yuborildi" });
-        }
-    } catch (err) {
-        if (err.name === 'JsonWebTokenError') return res.status(401).json({ error: 'Yaroqsiz token' });
-        console.error('OTP send error:', err);
-        res.status(500).json({ error: 'Server xatosi' });
-    }
-});
-
-// ─── Verify OTP ───
-router.post('/verify-otp', async (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        if (!token) return res.status(401).json({ error: 'Token kerak' });
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        const { phone, code } = req.body;
-        if (!phone || !code) return res.status(400).json({ error: 'Telefon va kod kerak' });
-
-        const user = await User.findById(decoded.userId);
-        if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
-
-        if (!user.otpExpiry || new Date() > user.otpExpiry) {
-            return res.status(400).json({ error: 'Kod muddati tugagan. Qayta yuboring.' });
-        }
-        const isCodeValid = user.otpCode && await bcrypt.compare(String(code).trim(), user.otpCode);
-        if (!isCodeValid) {
-            return res.status(400).json({ error: "Kod noto'g'ri" });
-        }
-
-        const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
-
-        user.phone = normalizedPhone;
-        user.isProfileComplete = true;
-        user.otpCode = '';
-        user.otpExpiry = null;
-        await user.save();
-
-        const accessToken = generateAccessToken({ userId: user._id, telegramId: user.telegramId });
-        const refreshToken = await generateRefreshToken(user, req.headers['user-agent'] || '');
-
-        res.json({ success: true, token: accessToken, refreshToken, user });
-    } catch (err) {
-        if (err.name === 'JsonWebTokenError') return res.status(401).json({ error: 'Yaroqsiz token' });
-        console.error('OTP verify error:', err);
         res.status(500).json({ error: 'Server xatosi' });
     }
 });
