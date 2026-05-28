@@ -13,10 +13,15 @@ module.exports = {
         {
             name: 'efes-api',
             script: '/app/backend/server.js',
-            instances: process.env.NODE_ENV === 'production' ? 2 : 1,
-            exec_mode: process.env.NODE_ENV === 'production' ? 'cluster' : 'fork',
+            // 1 instance (cluster mode emas) — RAM tejash uchun.
+            // Trafik oshsa, qayta 2 ga ko'tariladi.
+            instances: 1,
+            exec_mode: 'fork',
             watch: false,
-            max_memory_restart: '512M',
+            // RAM cheklash: 256MB dan oshsa qayta start
+            max_memory_restart: '256M',
+            // Node.js heap'ni cheklash — RSS o'sib ketishini oldini oladi
+            node_args: '--max-old-space-size=200',
             restart_delay: 3000,
             max_restarts: 10,
             exp_backoff_restart_delay: 100,
@@ -31,7 +36,8 @@ module.exports = {
             instances: 1,
             exec_mode: 'fork',
             watch: false,
-            max_memory_restart: '256M',
+            max_memory_restart: '128M',
+            node_args: '--max-old-space-size=100',
             restart_delay: 5000,
             max_restarts: 10,
             exp_backoff_restart_delay: 200,

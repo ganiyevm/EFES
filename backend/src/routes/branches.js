@@ -1,6 +1,24 @@
 const router = require('express').Router();
 const Branch = require('../models/Branch');
 const { authAdmin } = require('../middleware/auth');
+const { getDeliveryConfig, isWithinWorkingHours } = require('../utils/deliveryConfig');
+
+// ─── Ish vaqti statusi (public) ───
+router.get('/status', async (req, res) => {
+    try {
+        const cfg = await getDeliveryConfig();
+        const open = isWithinWorkingHours(cfg);
+        res.json({
+            isOpen: open,
+            workHours: cfg.workHours,
+            workStartHour: cfg.workStartHour,
+            workEndHour: cfg.workEndHour,
+            timezone: cfg.timezone || 'Asia/Tashkent',
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ─── Barcha filiallar (public) ───
 router.get('/', async (req, res) => {

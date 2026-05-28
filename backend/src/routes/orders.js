@@ -8,7 +8,7 @@ const BonusService = require('../services/bonus.service');
 const TelegramService = require('../services/telegram.service');
 const SseService = require('../services/sse.service');
 const { authTelegram } = require('../middleware/auth');
-const { getDeliveryConfig } = require('../utils/deliveryConfig');
+const { getDeliveryConfig, isWithinWorkingHours } = require('../utils/deliveryConfig');
 
 function haversineKm(lat1, lng1, lat2, lng2) {
     const R = 6371;
@@ -26,6 +26,16 @@ router.post('/', authTelegram, async (req, res) => {
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
         if (user.isBlocked) return res.status(403).json({ error: 'Hisobingiz bloklangan. Admin bilan bog\'laning.' });
+
+        // Ish vaqti tekshiruvi (08:00 — 01:00 Toshkent vaqti)
+        const cfg = await getDeliveryConfig();
+        if (!isWithinWorkingHours(cfg)) {
+            return res.status(400).json({
+                error: `Hozir ish vaqti tugagan. Ish vaqti: ${cfg.workHours}`,
+                code: 'OUT_OF_HOURS',
+                workHours: cfg.workHours,
+            });
+        }
 
         // Yetkazib berish radiusi tekshiruvi
         if (deliveryType === 'delivery' && addressLat && addressLng) {
@@ -78,9 +88,7 @@ router.post('/', authTelegram, async (req, res) => {
             return res.status(400).json({ error: 'Hech bir mahsulot topilmadi' });
         }
 
-        // Delivery config (admin sozlamalari)
-        const cfg = await getDeliveryConfig();
-
+        // cfg yuqorida ishlatilgan
         // Bonus tekshirish — admin sozlagan maxBonusPercent bo'yicha
         let actualBonusDiscount = 0;
         if (bonusDiscount > 0) {

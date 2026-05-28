@@ -9,7 +9,11 @@ const WEBAPP_URL = process.env.WEBAPP_URL || BASE_URL;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'efes_webhook_secret_prod';
 const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI)
+mongoose.connect(MONGODB_URI, {
+    maxPoolSize: 2,
+    minPoolSize: 0,
+    socketTimeoutMS: 30000,
+})
     .then(() => console.log('🤖 Bot: MongoDB ulandi'))
     .catch(e => console.error('🤖 Bot: MongoDB xato:', e.message));
 

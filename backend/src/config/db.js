@@ -24,7 +24,12 @@ async function seedOrderCounter() {
 
 const connectDB = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URI, { maxPoolSize: 5 });
+        await mongoose.connect(process.env.MONGODB_URI, {
+            maxPoolSize: 3,
+            minPoolSize: 0,
+            socketTimeoutMS: 30000,
+            serverSelectionTimeoutMS: 5000,
+        });
         console.log('✅ MongoDB ulandi');
         await seedOrderCounter();
     } catch (err) {

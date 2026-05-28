@@ -80,7 +80,6 @@ export default function Cart() {
     const [promoLoading, setPromoLoading] = useState(false);
 
     const [submitting, setSubmitting] = useState(false);
-    const [showPhoneModal, setShowPhoneModal] = useState(false);
 
     // Delivery radius check
     const radiusStatus = useMemo(() => {
@@ -100,6 +99,8 @@ export default function Cart() {
     const promoDiscount = promoData?.discountAmount || 0;
     const grandTotal = totalPrice - actualBonus - promoDiscount + deliveryCost;
 
+    const [shopStatus, setShopStatus] = useState({ isOpen: true, workHours: '08:00 — 01:00' });
+
     useEffect(() => {
         api.get('/branches').then(r => {
             const active = (r.data || []).filter(b => b.isActive);
@@ -108,6 +109,9 @@ export default function Cart() {
         }).catch(() => { });
         api.get('/delivery/config').then(r => {
             setDeliveryConfig(prev => ({ ...prev, ...r.data }));
+        }).catch(() => { });
+        api.get('/branches/status').then(r => {
+            setShopStatus(r.data || { isOpen: true });
         }).catch(() => { });
     }, []);
 
@@ -140,9 +144,9 @@ export default function Cart() {
     };
 
     const handleOrder = async () => {
-        // Telefon tasdiqlanmagan bo'lsa — avval kirish modal
-        if (!user?.isProfileComplete) {
-            setShowPhoneModal(true);
+        // Ish vaqti tekshiruvi
+        if (shopStatus && shopStatus.isOpen === false) {
+            alert(`Hozir ish vaqti tugagan.\nIsh vaqti: ${shopStatus.workHours}`);
             return;
         }
 
@@ -246,18 +250,22 @@ export default function Cart() {
                 />
             )}
 
-            {showPhoneModal && (
-                <PhoneAuthModal
-                    onClose={() => setShowPhoneModal(false)}
-                    onVerified={() => {
-                        setShowPhoneModal(false);
-                        // Tasdiqlangandan keyin buyurtmani davom ettirish
-                        setTimeout(handleOrder, 100);
-                    }}
-                />
-            )}
-
             <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 140 }}>
+                {shopStatus && shopStatus.isOpen === false && (
+                    <div style={{
+                        margin: '12px 16px 0',
+                        background: 'rgba(231,76,60,0.1)',
+                        border: '1px solid rgba(231,76,60,0.3)',
+                        borderRadius: 12,
+                        padding: '12px 14px',
+                        color: '#e74c3c',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        textAlign: 'center',
+                    }}>
+                        🌙 Hozir yopiq. Ish vaqti: <b>{shopStatus.workHours || '08:00 — 01:00'}</b>
+                    </div>
+                )}
                 <div style={{ padding: '16px 16px 8px' }}>
                     <div style={{ fontWeight: 800, fontSize: 20 }}>🛒 Savat</div>
                 </div>
@@ -688,253 +696,3 @@ const IS = {
     display: 'block',
 };
 
-// ── Telefon orqali kirish modal (checkout da) ─────────────────────────────
-function PhoneAuthModal({ onClose, onVerified }) {
-    const { setUser } = useAuth();
-    const [step, setStep] = useState('phone'); // 'phone' | 'otp'
-    const [phone, setPhone] = useState('+998');
-    const [code, setCode] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [cooldown, setCooldown] = useState(0);
-    const [via, setVia] = useState(''); // 'sms' | 'telegram'
-
-    useEffect(() => {
-        if (cooldown <= 0) return;
-        const timer = setInterval(() => setCooldown(c => c - 1), 1000);
-        return () => clearInterval(timer);
-    }, [cooldown]);
-
-    const handlePhoneInput = (val) => {
-        if (!val.startsWith('+998')) val = '+998';
-        const digits = val.replace(/\D/g, '');
-        if (digits.length <= 12) setPhone('+' + digits);
-    };
-
-    const isPhoneValid = phone.replace(/\D/g, '').length >= 12;
-
-    const handleSend = async () => {
-        if (!isPhoneValid) { setError("Telefon raqamni to'liq kiriting"); return; }
-        setError('');
-        setLoading(true);
-        try {
-            const { data } = await api.post('/auth/send-otp', { phone });
-            setVia(data.via || 'telegram');
-            setStep('otp');
-            setCooldown(60);
-        } catch (e) {
-            setError(e.response?.data?.error || 'Xato yuz berdi');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleVerify = async () => {
-        if (code.length < 6) { setError('6 xonali kodni kiriting'); return; }
-        setError('');
-        setLoading(true);
-        try {
-            const { data } = await api.post('/auth/verify-otp', { phone, code });
-            if (data.token) localStorage.setItem('efes_token', data.token);
-            setUser(data.user);
-            onVerified();
-        } catch (e) {
-            setError(e.response?.data?.error || "Kod noto'g'ri");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleResend = async () => {
-        if (cooldown > 0) return;
-        setError(''); setCode(''); setLoading(true);
-        try {
-            const { data } = await api.post('/auth/send-otp', { phone });
-            setVia(data.via || via);
-            setCooldown(60);
-        } catch (e) {
-            setError(e.response?.data?.error || 'Xato');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        // Backdrop
-        <div
-            onClick={e => e.target === e.currentTarget && onClose()}
-            style={{
-                position: 'fixed', inset: 0, zIndex: 300,
-                background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'flex-end',
-            }}
-        >
-            {/* Bottom sheet */}
-            <div style={{
-                width: '100%', background: 'var(--bg-card)',
-                borderRadius: '22px 22px 0 0',
-                padding: '24px 20px 40px',
-                boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
-                animation: 'slideUp 0.25s ease',
-            }}>
-                {/* Handle */}
-                <div style={{
-                    width: 40, height: 4, borderRadius: 2,
-                    background: 'var(--border)', margin: '0 auto 20px',
-                }} />
-
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <div style={{ fontWeight: 800, fontSize: 20 }}>Kirish</div>
-                    <button onClick={onClose} style={{
-                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                        borderRadius: 10, width: 32, height: 32,
-                        color: 'var(--text-secondary)', fontSize: 16,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>✕</button>
-                </div>
-
-                {step === 'phone' && (
-                    <>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
-                            Telefon raqami *
-                        </div>
-                        <input
-                            type="tel"
-                            value={phone}
-                            onChange={e => { handlePhoneInput(e.target.value); setError(''); }}
-                            placeholder="+998 90 123 45 67"
-                            autoFocus
-                            style={{
-                                ...IS, marginBottom: 8,
-                                fontSize: 16, padding: '14px',
-                                border: `1.5px solid ${error ? '#e74c3c' : 'var(--border)'}`,
-                                borderRadius: 14,
-                            }}
-                            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={e => e.target.style.borderColor = error ? '#e74c3c' : 'var(--border)'}
-                        />
-                        {error && <div style={{ color: '#e74c3c', fontSize: 12, marginBottom: 8 }}>{error}</div>}
-
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
-                            Tasdiqlash kodi SMS orqali yuboriladi.
-                        </div>
-
-                        <button
-                            onClick={handleSend}
-                            disabled={loading || !isPhoneValid}
-                            style={{
-                                width: '100%', padding: '16px',
-                                background: loading || !isPhoneValid
-                                    ? 'var(--bg-secondary)'
-                                    : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
-                                border: 'none', borderRadius: 15,
-                                color: loading || !isPhoneValid ? 'var(--text-secondary)' : '#1a1a24',
-                                fontSize: 16, fontWeight: 800, cursor: loading ? 'wait' : 'pointer',
-                                fontFamily: 'inherit',
-                                boxShadow: !loading && isPhoneValid ? '0 4px 18px rgba(212,160,23,0.35)' : 'none',
-                            }}
-                        >
-                            {loading ? '⏳ Yuborilmoqda...' : 'Davom etish'}
-                        </button>
-                    </>
-                )}
-
-                {step === 'otp' && (
-                    <>
-                        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                            <div style={{ fontSize: 40, marginBottom: 10 }}>{via === 'sms' ? '📱' : '✈️'}</div>
-                            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Kod yuborildi</div>
-                            {via === 'sms' ? (
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                    <b>{phone}</b> raqamiga SMS keldi.<br />
-                                    6 xonali kodni kiriting.
-                                </div>
-                            ) : (
-                                <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                    <b>@{BOT_USERNAME}</b> botini oching va<br />
-                                    u yerdan 6 xonali kodni kiriting
-                                </div>
-                            )}
-                        </div>
-
-                        {via !== 'sms' && (
-                            <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                padding: '12px', marginBottom: 14,
-                                background: 'rgba(0,136,204,0.1)', border: '1px solid rgba(0,136,204,0.2)',
-                                borderRadius: 13, color: '#0088cc', fontSize: 14,
-                                fontWeight: 700, textDecoration: 'none',
-                            }}>
-                                ✈️ Botni ochish
-                            </a>
-                        )}
-
-                        <input
-                            type="number"
-                            inputMode="numeric"
-                            value={code}
-                            onChange={e => { setCode(e.target.value.slice(0, 6)); setError(''); }}
-                            placeholder="• • • • • •"
-                            autoFocus
-                            style={{
-                                ...IS, marginBottom: 8,
-                                textAlign: 'center', fontSize: 24,
-                                fontWeight: 900, letterSpacing: 8,
-                                padding: '14px', borderRadius: 14,
-                                border: `1.5px solid ${error ? '#e74c3c' : 'var(--border)'}`,
-                            }}
-                            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={e => e.target.style.borderColor = error ? '#e74c3c' : 'var(--border)'}
-                        />
-                        {error && <div style={{ color: '#e74c3c', fontSize: 12, marginBottom: 8 }}>{error}</div>}
-
-                        <button
-                            onClick={handleVerify}
-                            disabled={loading || code.length < 6}
-                            style={{
-                                width: '100%', padding: '16px', marginBottom: 12,
-                                background: loading || code.length < 6
-                                    ? 'var(--bg-secondary)'
-                                    : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
-                                border: 'none', borderRadius: 15,
-                                color: loading || code.length < 6 ? 'var(--text-secondary)' : '#1a1a24',
-                                fontSize: 16, fontWeight: 800, cursor: loading ? 'wait' : 'pointer',
-                                fontFamily: 'inherit',
-                                boxShadow: !loading && code.length >= 6 ? '0 4px 18px rgba(212,160,23,0.35)' : 'none',
-                            }}
-                        >
-                            {loading ? '⏳ Tekshirilmoqda...' : '✅ Tasdiqlash'}
-                        </button>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <button onClick={() => { setStep('phone'); setCode(''); setError(''); }}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                ← Orqaga
-                            </button>
-                            <button
-                                onClick={cooldown > 0 ? undefined : handleResend}
-                                disabled={cooldown > 0 || loading}
-                                style={{
-                                    background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 13,
-                                    cursor: cooldown > 0 ? 'default' : 'pointer',
-                                    color: cooldown > 0 ? 'var(--text-secondary)' : 'var(--primary-light)',
-                                    fontWeight: 600,
-                                }}
-                            >
-                                {cooldown > 0 ? `Qayta yuborish (${cooldown}s)` : 'Qayta yuborish'}
-                            </button>
-                        </div>
-                    </>
-                )}
-            </div>
-
-            <style>{`
-                @keyframes slideUp {
-                    from { transform: translateY(100%); }
-                    to   { transform: translateY(0); }
-                }
-            `}</style>
-        </div>
-    );
-}
