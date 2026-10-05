@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useT } from '../i18n';
+import { useT, fmt } from '../i18n';
 import api from '../api';
+import { openExternal } from './Payment';
+
+const ACTIVE = ['awaiting_payment', 'pending_operator', 'confirmed', 'preparing', 'ready', 'on_the_way'];
 import BottomNav from '../components/BottomNav';
 import { PaymentIcon } from '../components/BrandIcon';
 
@@ -41,7 +44,7 @@ function StatusBadge({ status, t }) {
     );
 }
 
-function OrderDetail({ order, onClose, t }) {
+function OrderDetail({ order, onClose, t, onCancel, onPay, busy }) {
     const payKey = `pay_${order.paymentMethod}`;
     const payText = t(payKey) !== payKey ? t(payKey) : order.paymentMethod;
     const payLabel = (
@@ -90,7 +93,12 @@ function OrderDetail({ order, onClose, t }) {
 
                 <StatusBadge status={order.status} t={t} />
 
-                {order.estimatedTime > 0 && (
+                {(order.deliveryDate || order.deliveryTime) && (
+                    <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+                        🕐 {t('deliveryTimeLabel')}: <b style={{ color: 'var(--text)' }}>{[order.deliveryDate, order.deliveryTime].filter(Boolean).join(' ')}</b>
+                    </div>
+                )}
+                {!order.deliveryTime && order.estimatedTime > 0 && ['pending_operator', 'confirmed', 'preparing', 'ready', 'on_the_way'].includes(order.status) && (
                     <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
                         ⏱ {t('estimatedTime')}: ~{order.estimatedTime} {t('minutes')}
                     </div>
@@ -108,7 +116,7 @@ function OrderDetail({ order, onClose, t }) {
                             <div style={{ fontWeight: 600 }}>{item.productName || item.product?.name || t('orderProduct')}</div>
                             {item.note && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>📝 {item.note}</div>}
                             <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                                {(item.price || 0).toLocaleString()} so'm × {item.qty}
+                                {fmt(item.price)} {t('sum')} × {item.qty}
                             </div>
                         </div>
                         <div style={{
@@ -116,7 +124,7 @@ function OrderDetail({ order, onClose, t }) {
                             background: 'linear-gradient(135deg, #F0C040, #D4A017)',
                             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                         }}>
-                            {((item.price || 0) * item.qty).toLocaleString()} so'm
+                            {fmt((item.price || 0) * item.qty)} {t('sum')}
                         </div>
                     </div>
                 ))}
@@ -124,7 +132,7 @@ function OrderDetail({ order, onClose, t }) {
                 <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
 
                 {order.branch?.name && <InfoRow label={`🏢 ${t('branch')}`} value={order.branch.name} />}
-                {order.branch?.phone && <InfoRow label={`📞 ${t('orderBranchPhone')}`} value={order.branch.phone} />}
+                {order.branch?.phone && <InfoRow label={`📞 ${t('orderBranchPhone')}`} value={<a href={`tel:${order.branch.phone.replace(/[^\d+]/g, '')}`} style={{ color: 'var(--primary)' }}>{order.branch.phone}</a>} />}
                 <InfoRow label={`📍 ${t('orderAddr')}`} value={order.address || (order.deliveryType === 'pickup' ? t('pickup') : '—')} />
                 <InfoRow label={t('paymentTitle')} value={payLabel} />
                 {order.notes && <InfoRow label={`📝 ${t('orderNote')}`} value={order.notes} />}
@@ -134,19 +142,19 @@ function OrderDetail({ order, onClose, t }) {
                 {order.deliveryCost > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: 'var(--text-secondary)' }}>
                         <span>{t('deliveryCost')}</span>
-                        <span>{order.deliveryCost.toLocaleString()} so'm</span>
+                        <span>{fmt(order.deliveryCost)} {t('sum')}</span>
                     </div>
                 )}
                 {order.bonusDiscount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: '#2ecc71' }}>
-                        <span>Bonus chegirma</span>
-                        <span>−{order.bonusDiscount.toLocaleString()} so'm</span>
+                        <span>{t('bonusDiscountRow')}</span>
+                        <span>−{fmt(order.bonusDiscount)} {t('sum')}</span>
                     </div>
                 )}
                 {order.promoDiscount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: '#2ecc71' }}>
-                        <span>Promo chegirma</span>
-                        <span>−{order.promoDiscount.toLocaleString()} so'm</span>
+                        <span>{t('promoDiscountRow')}</span>
+                        <span>−{fmt(order.promoDiscount)} {t('sum')}</span>
                     </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 17, marginTop: 4 }}>
@@ -154,8 +162,22 @@ function OrderDetail({ order, onClose, t }) {
                     <span style={{
                         background: 'linear-gradient(135deg, #F0C040, #D4A017)',
                         WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                    }}>{(order.total || 0).toLocaleString()} so'm</span>
+                    }}>{fmt(order.total)} {t('sum')}</span>
                 </div>
+
+                {/* Amallar: to'lash / bekor qilish */}
+                {(order.status === 'awaiting_payment' || (order.status === 'pending_operator' && order.paymentStatus !== 'paid')) && (
+                    <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                        {order.status === 'awaiting_payment' && (
+                            <button disabled={busy} onClick={() => onPay(order)} style={{ ...actionBtn, flex: 2, background: 'linear-gradient(135deg, var(--primary), var(--primary-light))', color: '#1a1a24', border: 'none' }}>
+                                💳 {t('payNow')}
+                            </button>
+                        )}
+                        <button disabled={busy} onClick={() => onCancel(order)} style={{ ...actionBtn, flex: 1, color: '#e74c3c' }}>
+                            {busy ? '⏳' : `✕ ${t('cancelOrder')}`}
+                        </button>
+                    </div>
+                )}
 
                 {/* Status History */}
                 {order.statusHistory?.length > 0 && (
@@ -179,7 +201,6 @@ function OrderDetail({ order, onClose, t }) {
                                     }}>{icon}</div>
                                     <div>
                                         <span style={{ fontWeight: 700, color: c.color }}>{label}</span>
-                                        {h.note && <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{h.note}</div>}
                                         <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 2 }}>
                                             {new Date(h.changedAt).toLocaleString([], { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </div>
@@ -193,6 +214,12 @@ function OrderDetail({ order, onClose, t }) {
         </div>
     );
 }
+
+const actionBtn = {
+    width: '100%', padding: '13px 16px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+    background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text)',
+    fontSize: 14, fontWeight: 700,
+};
 
 function InfoRow({ label, value }) {
     return (
@@ -208,14 +235,60 @@ export default function Orders() {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selected, setSelected] = useState(null);
+    const [error, setError] = useState(false);
+    const [selectedId, setSelectedId] = useState(null);
+    const [busy, setBusy] = useState(false);
 
-    useEffect(() => {
-        api.get('/orders')
-            .then(r => setOrders(r.data || []))
-            .catch(err => console.error(err))
+    const load = useCallback(() => {
+        return api.get('/orders')
+            .then(r => { setOrders(r.data || []); setError(false); })
+            .catch(() => setError(true))
             .finally(() => setLoading(false));
     }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    // Faol buyurtma bo'lsa holat avtomatik yangilanib turadi
+    const hasActive = orders.some(o => ACTIVE.includes(o.status));
+    useEffect(() => {
+        if (!hasActive) return;
+        const id = setInterval(() => { if (!document.hidden) load(); }, 10000);
+        const onVisible = () => { if (!document.hidden) load(); };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+    }, [hasActive, load]);
+
+    const selected = orders.find(o => o._id === selectedId) || null;
+
+    const handleCancel = async (order) => {
+        if (!window.confirm(t('cancelConfirm'))) return;
+        setBusy(true);
+        try {
+            const r = await api.patch(`/orders/${order._id}/cancel`);
+            setOrders(prev => prev.map(o => o._id === order._id ? { ...o, ...r.data, branch: o.branch } : o));
+        } catch (err) {
+            alert(err.response?.data?.error || t('serverConnectError'));
+            load();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const handlePay = async (order) => {
+        setBusy(true);
+        try {
+            const r = await api.get(`/orders/${order._id}/pay`);
+            if (r.data.paymentUrl) openExternal(r.data.paymentUrl);
+            const q = new URLSearchParams({ orderId: order._id, method: order.paymentMethod, total: String(order.total), orderNum: order.orderNumber, type: order.deliveryType });
+            if (r.data.paymentUrl) q.set('payUrl', r.data.paymentUrl);
+            navigate(`/payment?${q}`);
+        } catch (err) {
+            alert(err.response?.data?.error || t('serverConnectError'));
+            load();
+        } finally {
+            setBusy(false);
+        }
+    };
 
     if (loading) return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg)' }}>
@@ -231,7 +304,13 @@ export default function Orders() {
                 </div>
             </div>
 
-            {orders.length === 0 ? (
+            {error && orders.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: 36, marginBottom: 12 }}>📡</div>
+                    <div style={{ marginBottom: 16 }}>{t('loadError')}</div>
+                    <button onClick={() => { setLoading(true); load(); }} style={{ ...actionBtn, maxWidth: 200, margin: '0 auto' }}>🔄 {t('retry')}</button>
+                </div>
+            ) : orders.length === 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center' }}>
                     <div style={{
                         width: 80, height: 80, borderRadius: 24,
@@ -255,7 +334,7 @@ export default function Orders() {
                     {orders.map(o => (
                         <div
                             key={o._id}
-                            onClick={() => setSelected(o)}
+                            onClick={() => setSelectedId(o._id)}
                             style={{
                                 background: 'var(--bg-card)', border: '1px solid var(--border)',
                                 borderRadius: 18, padding: 16, marginBottom: 10, cursor: 'pointer',
@@ -276,7 +355,7 @@ export default function Orders() {
                                     background: 'linear-gradient(135deg, #F0C040, #D4A017)',
                                     WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                                 }}>
-                                    {(o.total || 0).toLocaleString()} so'm
+                                    {fmt(o.total)} {t('sum')}
                                 </span>
                                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                                     {new Date(o.createdAt).toLocaleDateString()}
@@ -287,7 +366,7 @@ export default function Orders() {
                 </div>
             )}
 
-            {selected && <OrderDetail order={selected} onClose={() => setSelected(null)} t={t} />}
+            {selected && <OrderDetail order={selected} onClose={() => setSelectedId(null)} t={t} onCancel={handleCancel} onPay={handlePay} busy={busy} />}
             <BottomNav />
         </div>
     );

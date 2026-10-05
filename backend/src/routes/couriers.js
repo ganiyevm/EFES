@@ -2,8 +2,11 @@ const router = require('express').Router();
 const Courier = require('../models/Courier');
 const Order = require('../models/Order');
 const { authAdmin } = require('../middleware/auth');
+const { tashkentDayStart, tashkentMonthStart, tashkentYearStart } = require('../utils/time');
 
-const COURIER_BOT_USERNAME = process.env.COURIER_BOT_USERNAME || 'efes_kebab_dastafka_bot';
+// Taklif linki BROADCAST botga olib boradi — /start courier_<token> o'sha botda ishlanadi
+// (courierBot.service.js dagi BROADCAST_USERNAME bilan bir xil bo'lishi shart).
+const COURIER_BOT_USERNAME = process.env.COURIER_BOT_USERNAME || 'efes_kebab_dastafka_all_bot';
 
 function buildInviteLink(token) {
     return `https://t.me/${COURIER_BOT_USERNAME}?start=courier_${token}`;
@@ -20,10 +23,9 @@ function serialize(courier, stats) {
 
 // Bitta aggregate so'rov — har kurier uchun bugun/oy/yil statistikasini chiqaradi.
 async function aggregateStats() {
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const startOfDay = tashkentDayStart();
+    const startOfMonth = tashkentMonthStart();
+    const startOfYear = tashkentYearStart();
 
     const rows = await Order.aggregate([
         {
@@ -88,7 +90,7 @@ router.post('/', async (req, res) => {
             name: String(name).trim(),
             phone: String(phone).trim(),
             carPlate: (carPlate || '').trim(),
-            bonusPerDelivery: Number(bonusPerDelivery) || 5000,
+            bonusPerDelivery: bonusPerDelivery === undefined || bonusPerDelivery === '' ? 5000 : Math.max(0, Number(bonusPerDelivery) || 0),
         });
         res.status(201).json(serialize(courier));
     } catch (err) {
@@ -104,7 +106,10 @@ router.put('/:id', async (req, res) => {
         for (const k of fields) {
             if (req.body[k] !== undefined) patch[k] = req.body[k];
         }
-        const courier = await Courier.findByIdAndUpdate(req.params.id, patch, { new: true });
+        if (patch.bonusPerDelivery !== undefined) patch.bonusPerDelivery = Math.max(0, Number(patch.bonusPerDelivery) || 0);
+        // Nofaol qilingan kurier smenadan ham chiqariladi — unga buyurtma yuborilmaydi
+        if (patch.isActive === false) { patch.onShift = false; patch.shiftStartedAt = null; }
+        const courier = await Courier.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true });
         if (!courier) return res.status(404).json({ error: 'Kurier topilmadi' });
         res.json(serialize(courier));
     } catch (err) {
@@ -131,7 +136,7 @@ router.post('/:id/regenerate-token', async (req, res) => {
 // ─── O'chirish (soft) ───
 router.delete('/:id', async (req, res) => {
     try {
-        await Courier.findByIdAndUpdate(req.params.id, { isActive: false });
+        await Courier.findByIdAndUpdate(req.params.id, { isActive: false, onShift: false, shiftStartedAt: null });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

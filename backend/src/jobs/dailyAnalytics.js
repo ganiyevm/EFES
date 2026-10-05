@@ -5,10 +5,10 @@ async function aggregateDay(targetDate) {
     const User = require('../models/User');
     const AnalyticsDaily = require('../models/AnalyticsDaily');
 
-    const dayStart = new Date(targetDate);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+    const { tashkentDayStart } = require('../utils/time');
+    // Server UTC'da — kun chegarasi Toshkent vaqti bo'yicha olinadi
+    const dayStart = tashkentDayStart(new Date(targetDate));
+    const dayEnd = tashkentDayStart(new Date(targetDate), 1);
 
     const range = { createdAt: { $gte: dayStart, $lt: dayEnd } };
 
@@ -29,7 +29,7 @@ async function aggregateDay(targetDate) {
             { $match: { ...range, paymentStatus: 'paid' } },
             { $group: { _id: null, total: { $sum: '$total' }, count: { $sum: 1 } } },
         ]),
-        User.countDocuments(range),
+        User.countDocuments({ registeredAt: { $gte: dayStart, $lt: dayEnd } }),
         Order.aggregate([
             { $match: { ...range, paymentStatus: 'paid' } },
             { $group: { _id: '$paymentMethod', count: { $sum: 1 } } },

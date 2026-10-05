@@ -1,26 +1,55 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
+const { tashkentDayStart, DAY_MS } = require('../utils/time');
 
+const TZ = 'Asia/Tashkent';
+const ACTIVE = ['pending_operator', 'confirmed', 'preparing', 'ready', 'on_the_way'];
+
+// Barcha kun chegaralari Toshkent vaqti bo'yicha (server UTC'da ishlaydi).
 class AnalyticsService {
 
     static getPeriodDates(period = 'month') {
         const to = new Date();
-        const from = new Date();
-        switch (period) {
-            case 'week':    from.setDate(from.getDate() - 7);            break;
-            case 'month':   from.setDate(from.getDate() - 30);           break;
-            case 'quarter': from.setDate(from.getDate() - 90);           break;
-            case 'year':    from.setFullYear(from.getFullYear() - 1);    break;
-            default:        from.setDate(from.getDate() - 30);
-        }
-        from.setHours(0, 0, 0, 0);
+        const days = { today: 0, week: 6, month: 29, quarter: 89, year: 364 }[period] ?? 29;
+        const from = tashkentDayStart(to, -days);
         return { from, to };
     }
 
+    // Bitta aggregate bilan davr statistikasi (avval barcha buyurtmalar xotiraga yuklanardi)
+    static async aggregateRange(from, to) {
+        const [agg, newUsers] = await Promise.all([
+            Order.aggregate([
+                { $match: { createdAt: { $gte: from, $lt: to } } },
+                {
+                    $group: {
+                        _id: null,
+                        totalOrders: { $sum: 1 },
+                        completedOrders: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+                        cancelledOrders: { $sum: { $cond: [{ $in: ['$status', ['cancelled', 'rejected']] }, 1, 0] } },
+                        activeOrders: { $sum: { $cond: [{ $in: ['$status', ACTIVE] }, 1, 0] } },
+                        totalRevenue: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, '$total', 0] } },
+                    },
+                },
+            ]),
+            User.countDocuments({ registeredAt: { $gte: from, $lt: to } }),
+        ]);
+        const r = agg[0] || { totalOrders: 0, completedOrders: 0, cancelledOrders: 0, activeOrders: 0, totalRevenue: 0 };
+        return {
+            totalOrders: r.totalOrders,
+            completedOrders: r.completedOrders,
+            cancelledOrders: r.cancelledOrders,
+            activeOrders: r.activeOrders,
+            totalRevenue: r.totalRevenue,
+            avgOrderValue: r.completedOrders > 0 ? Math.round(r.totalRevenue / r.completedOrders) : 0,
+            newUsers,
+            conversionRate: r.totalOrders > 0 ? Math.round((r.completedOrders / r.totalOrders) * 100) : 0,
+        };
+    }
+
     static async getOverview() {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+        const today = tashkentDayStart();
+        const tomorrow = tashkentDayStart(new Date(), 1);
+        const yesterday = tashkentDayStart(new Date(), -1);
 
         const [todayStats, yesterdayStats] = await Promise.all([
             this.getDayStats(today, tomorrow),
@@ -38,80 +67,38 @@ class AnalyticsService {
     }
 
     static async getDayStats(from, to) {
-        const [orders, newUsers] = await Promise.all([
-            Order.find({ createdAt: { $gte: from, $lt: to } }).lean(),
-            User.countDocuments({ registeredAt: { $gte: from, $lt: to } }),
-        ]);
-        const completed  = orders.filter(o => o.status === 'delivered');
-        const cancelled  = orders.filter(o => ['cancelled', 'rejected'].includes(o.status));
-        const totalRevenue = completed.reduce((s, o) => s + o.total, 0);
-        return {
-            totalOrders: orders.length,
-            completedOrders: completed.length,
-            cancelledOrders: cancelled.length,
-            totalRevenue, newUsers,
-            conversionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
-        };
+        return this.aggregateRange(from, to);
     }
 
     static async getPeriodChartData(period = 'month') {
         const { from, to } = this.getPeriodDates(period);
+        const unit = period === 'year' ? 'month' : period === 'quarter' ? 'week' : 'day';
 
-        if (period === 'week' || period === 'month') {
-            return Order.aggregate([
-                { $match: { createdAt: { $gte: from, $lte: to } } },
-                {
-                    $group: {
-                        _id: {
-                            year:  { $year: '$createdAt' },
-                            month: { $month: '$createdAt' },
-                            day:   { $dayOfMonth: '$createdAt' },
-                        },
-                        totalRevenue: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, '$total', 0] } },
-                        totalOrders:  { $sum: 1 },
-                        date:         { $first: '$createdAt' },
-                    },
-                },
-                { $project: { date: 1, totalRevenue: 1, totalOrders: 1 } },
-                { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } },
-            ]);
-        }
-
-        if (period === 'quarter') {
-            // ISO hafta boshi (Dushanba) bo'yicha guruhlash — $dateTrunc native
-            return Order.aggregate([
-                { $match: { createdAt: { $gte: from, $lte: to } } },
-                {
-                    $group: {
-                        _id: { $dateTrunc: { date: '$createdAt', unit: 'week', startOfWeek: 'monday' } },
-                        totalRevenue: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, '$total', 0] } },
-                        totalOrders:  { $sum: 1 },
-                    },
-                },
-                { $project: { date: '$_id', totalRevenue: 1, totalOrders: 1 } },
-                { $sort: { date: 1 } },
-            ]);
-        }
-
-        return Order.aggregate([
+        const rows = await Order.aggregate([
             { $match: { createdAt: { $gte: from, $lte: to } } },
             {
                 $group: {
-                    _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                    _id: { $dateTrunc: { date: '$createdAt', unit, timezone: TZ, ...(unit === 'week' ? { startOfWeek: 'monday' } : {}) } },
                     totalRevenue: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, '$total', 0] } },
                     totalOrders:  { $sum: 1 },
-                    date:         { $first: '$createdAt' },
                 },
             },
-            { $project: { date: 1, totalRevenue: 1, totalOrders: 1 } },
-            { $sort: { '_id.year': 1, '_id.month': 1 } },
+            { $project: { _id: 0, date: '$_id', totalRevenue: 1, totalOrders: 1 } },
+            { $sort: { date: 1 } },
         ]);
+
+        // Kunlik grafikda buyurtmasiz kunlar ham 0 bilan ko'rinsin (chiziq uzilmasin)
+        if (unit !== 'day') return rows;
+        const byDay = new Map(rows.map(r => [new Date(r.date).getTime(), r]));
+        const filled = [];
+        for (let t = from.getTime(); t <= to.getTime(); t += DAY_MS) {
+            filled.push(byDay.get(t) || { date: new Date(t), totalRevenue: 0, totalOrders: 0 });
+        }
+        return filled;
     }
 
     static async getTopProducts(limit = 10, days = 7) {
-        const from = new Date();
-        from.setDate(from.getDate() - days);
-
+        const from = tashkentDayStart(new Date(), -(Math.max(1, days) - 1));
         return Order.aggregate([
             { $match: { createdAt: { $gte: from }, status: 'delivered' } },
             { $unwind: '$items' },
@@ -124,17 +111,12 @@ class AnalyticsService {
                 },
             },
             { $sort: { totalQty: -1 } },
-            { $limit: parseInt(limit) },
+            { $limit: Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50) },
         ]);
     }
 
     static async getBranchStats(period = 'today') {
-        let from;
-        if (period === 'today') {
-            from = new Date(); from.setHours(0, 0, 0, 0);
-        } else {
-            ({ from } = this.getPeriodDates(period));
-        }
+        const { from } = this.getPeriodDates(period);
 
         return Order.aggregate([
             { $match: { createdAt: { $gte: from } } },
@@ -155,7 +137,7 @@ class AnalyticsService {
                     completionRate: {
                         $cond: [
                             { $gt: ['$totalOrders', 0] },
-                            { $multiply: [{ $divide: ['$completedOrders', '$totalOrders'] }, 100] },
+                            { $round: [{ $multiply: [{ $divide: ['$completedOrders', '$totalOrders'] }, 100] }, 0] },
                             0,
                         ],
                     },
@@ -174,9 +156,9 @@ class AnalyticsService {
     }
 
     static async getUserStats() {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const weekAgo  = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
-        const monthAgo = new Date(today); monthAgo.setMonth(monthAgo.getMonth() - 1);
+        const today    = tashkentDayStart();
+        const weekAgo  = tashkentDayStart(new Date(), -7);
+        const monthAgo = tashkentDayStart(new Date(), -30);
 
         const [total, todayNew, weekNew, monthNew, active] = await Promise.all([
             User.countDocuments(),
@@ -216,21 +198,7 @@ class AnalyticsService {
         const prevFrom = new Date(from - diff);
         const prevTo   = new Date(from);
 
-        const aggregate = async (f, t) => {
-            const [orders, users] = await Promise.all([
-                Order.find({ createdAt: { $gte: f, $lt: t } }).lean(),
-                User.countDocuments({ registeredAt: { $gte: f, $lt: t } }),
-            ]);
-            const delivered = orders.filter(o => o.status === 'delivered');
-            return {
-                totalOrders:  orders.length,
-                totalRevenue: delivered.reduce((s, o) => s + o.total, 0),
-                newUsers:     users,
-                conversionRate: orders.length > 0 ? Math.round((delivered.length / orders.length) * 100) : 0,
-            };
-        };
-
-        const [curr, prev] = await Promise.all([aggregate(from, to), aggregate(prevFrom, prevTo)]);
+        const [curr, prev] = await Promise.all([this.aggregateRange(from, to), this.aggregateRange(prevFrom, prevTo)]);
         const pct = (a, b) => b > 0 ? Math.round(((a - b) / b) * 100) : 0;
 
         return {

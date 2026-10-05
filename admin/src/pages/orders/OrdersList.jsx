@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 import { PaymentBadge, YandexIcon } from '../../components/BrandIcon';
 
 const STATUSES = [
     { key: '', label: 'Barchasi' },
+    { key: 'active', label: 'Faol' },
     { key: 'awaiting_payment', label: "To'lov kutilmoqda" },
     { key: 'pending_operator', label: 'Operator' },
     { key: 'confirmed', label: 'Tasdiqlandi' },
@@ -43,30 +44,86 @@ const NEXT_STATUSES = {
     rejected: [],
     cancelled: [],
 };
+// Olib ketishda kurier bosqichi yo'q: tayyor → mijozga berildi
+const PICKUP_NEXT = { ...NEXT_STATUSES, ready: ['delivered'] };
+const nextStatuses = (o) => (o.deliveryType === 'pickup' ? PICKUP_NEXT : NEXT_STATUSES)[o.status] || [];
+const CANCELLABLE = ['awaiting_payment', 'pending_operator', 'confirmed', 'preparing', 'ready', 'on_the_way'];
+const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
+
+// Yangi buyurtma signali (fayl kerak emas — WebAudio)
+function playBeep() {
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new Ctx();
+        [0, 0.25, 0.5].forEach((delay) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.frequency.value = 880;
+            g.gain.setValueAtTime(0.25, ctx.currentTime + delay);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.2);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(ctx.currentTime + delay);
+            o.stop(ctx.currentTime + delay + 0.2);
+        });
+        setTimeout(() => ctx.close(), 1500);
+    } catch { /* brauzer ruxsat bermagan */ }
+}
 
 export default function OrdersList() {
     const [orders, setOrders] = useState([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [status, setStatus] = useState('');
+    const [query, setQuery] = useState('');
+    const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState(null);
+    const [soundOn, setSoundOn] = useState(() => localStorage.getItem('efes_admin_sound') !== 'off');
+    const seenPending = useRef(null);
     const [updating, setUpdating] = useState(false);
     const [couriers, setCouriers] = useState([]);
     const limit = 20;
 
-    const fetchOrders = useCallback(() => {
-        setLoading(true);
+    // silent=true — fon yangilanishida jadval "Yuklanmoqda"ga almashib, miltillamaydi
+    const fetchOrders = useCallback((silent = false) => {
+        if (!silent) setLoading(true);
         const params = new URLSearchParams({ page, limit });
         if (status) params.set('status', status);
+        if (search) params.set('q', search);
         api.get(`/admin/orders?${params}`)
-            .then(r => { setOrders(r.data.orders || []); setTotal(r.data.total || 0); })
+            .then(r => {
+                setOrders(r.data.orders || []);
+                setTotal(r.data.total || 0);
+                setSelected(sel => sel ? (r.data.orders || []).find(o => o._id === sel._id) || sel : sel);
+            })
             .catch(() => { })
             .finally(() => setLoading(false));
-    }, [page, status]);
+    }, [page, status, search]);
 
     useEffect(() => { fetchOrders(); }, [fetchOrders]);
-    useEffect(() => { const id = setInterval(fetchOrders, 15000); return () => clearInterval(id); }, [fetchOrders]);
+    useEffect(() => { const id = setInterval(() => fetchOrders(true), 15000); return () => clearInterval(id); }, [fetchOrders]);
+    useEffect(() => { const id = setTimeout(() => { setSearch(query.trim()); setPage(1); }, 400); return () => clearTimeout(id); }, [query]);
+
+    // Yangi "operator kutmoqda" buyurtma kelsa — ovozli signal (har qanday sahifa/filtrda)
+    useEffect(() => {
+        const check = () => api.get('/admin/orders?status=pending_operator&limit=50').then(r => {
+            const ids = new Set((r.data.orders || []).map(o => o._id));
+            if (seenPending.current) {
+                const fresh = [...ids].filter(id => !seenPending.current.has(id));
+                if (fresh.length > 0) {
+                    if (soundOn) playBeep();
+                    document.title = `🔔 (${fresh.length}) Yangi buyurtma — EFES`;
+                    fetchOrders(true);
+                }
+            }
+            seenPending.current = ids;
+        }).catch(() => { });
+        check();
+        const id = setInterval(check, 15000);
+        const onFocus = () => { document.title = 'EFES Admin'; };
+        window.addEventListener('focus', onFocus);
+        return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+    }, [soundOn]);
     useEffect(() => {
         api.get('/couriers')
             .then(r => setCouriers((r.data || []).filter(c => c.isActive)))
@@ -89,12 +146,13 @@ export default function OrdersList() {
     const handleStatusChange = async (orderId, newStatus, note = '') => {
         setUpdating(true);
         try {
-            await api.patch(`/admin/orders/${orderId}/status`, { status: newStatus, note });
-            fetchOrders();
-            if (selected?._id === orderId) {
-                const r = await api.get(`/admin/orders/${orderId}`);
-                setSelected(r.data);
+            if ((newStatus === 'cancelled' || newStatus === 'rejected') &&
+                !confirm(newStatus === 'cancelled' ? 'Buyurtmani bekor qilasizmi? Mijozga xabar boradi.' : 'Buyurtmani rad etasizmi? Mijozga xabar boradi.')) {
+                return;
             }
+            const r = await api.patch(`/admin/orders/${orderId}/status`, { status: newStatus, note });
+            fetchOrders(true);
+            if (selected?._id === orderId) setSelected(r.data);
         } catch (err) {
             alert('Xatolik: ' + (err.response?.data?.error || err.message));
         } finally {
@@ -110,7 +168,18 @@ export default function OrdersList() {
                 <h1 className="page-title">📋 Buyurtmalar</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Jami: {total}</span>
-                    <button className="btn btn-outline btn-sm" onClick={fetchOrders}>🔄 Yangilash</button>
+                    <button className="btn btn-outline btn-sm" title="Yangi buyurtma ovozi"
+                        onClick={() => { const v = !soundOn; setSoundOn(v); localStorage.setItem('efes_admin_sound', v ? 'on' : 'off'); if (v) playBeep(); }}>
+                        {soundOn ? '🔔' : '🔕'}
+                    </button>
+                    <button className="btn btn-outline btn-sm" onClick={() => fetchOrders()}>🔄 Yangilash</button>
+                </div>
+            </div>
+
+            <div className="filter-row">
+                <div className="search-bar" style={{ flex: 1, maxWidth: 340 }}>
+                    <span className="search-icon">🔍</span>
+                    <input className="form-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Raqam, mijoz ismi yoki telefon..." />
                 </div>
             </div>
 
@@ -161,7 +230,9 @@ export default function OrdersList() {
                                             ))}
                                             {o.items?.length > 2 && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>+{o.items.length - 2} ta</div>}
                                         </td>
-                                        <td><strong>{(o.total || 0).toLocaleString()} so'm</strong></td>
+                                        <td><strong>{fmt(o.total)} so'm</strong>
+                                            {o.paymentStatus === 'paid' && <div style={{ fontSize: 10, color: 'var(--success)' }}>✓ to'langan</div>}
+                                        </td>
                                         <td>
                                             <PaymentBadge method={o.paymentMethod} size={16} />
                                         </td>
@@ -191,9 +262,9 @@ export default function OrdersList() {
                                             {new Date(o.createdAt).toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td onClick={e => e.stopPropagation()}>
-                                            {NEXT_STATUSES[o.status]?.length > 0 && (
+                                            {nextStatuses(o).length > 0 && (
                                                 <div style={{ display: 'flex', gap: 4 }}>
-                                                    {NEXT_STATUSES[o.status].map(ns => (
+                                                    {nextStatuses(o).map(ns => (
                                                         <button
                                                             key={ns}
                                                             className="btn btn-sm"
@@ -201,7 +272,7 @@ export default function OrdersList() {
                                                             onClick={() => handleStatusChange(o._id, ns)}
                                                             style={{ background: ns === 'rejected' || ns === 'cancelled' ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, var(--primary), var(--primary-strong))', color: ns === 'rejected' || ns === 'cancelled' ? '#fff' : '#1a1a24', fontSize: 11, padding: '4px 8px' }}
                                                         >
-                                                            {STATUS_ICONS[ns]} {STATUS_LABELS[ns]?.split(' ')[0]}
+                                                            {STATUS_ICONS[ns]} {ns === 'delivered' && o.deliveryType === 'pickup' ? 'Berildi' : STATUS_LABELS[ns]?.split(' ')[0]}
                                                         </button>
                                                     ))}
                                                 </div>
@@ -216,9 +287,12 @@ export default function OrdersList() {
                     {pages > 1 && (
                         <div className="pagination" style={{ padding: '12px 0' }}>
                             <button className="page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
-                            {Array.from({ length: Math.min(pages, 5) }, (_, i) => (
-                                <button key={i + 1} className={`page-btn ${page === i + 1 ? 'active' : ''}`} onClick={() => setPage(i + 1)}>{i + 1}</button>
-                            ))}
+                            {(() => {
+                                const start = Math.max(1, Math.min(page - 2, pages - 4));
+                                return Array.from({ length: Math.min(pages, 5) }, (_, i) => start + i).map(n => (
+                                    <button key={n} className={`page-btn ${page === n ? 'active' : ''}`} onClick={() => setPage(n)}>{n}</button>
+                                ));
+                            })()}
                             <button className="page-btn" onClick={() => setPage(p => p + 1)} disabled={page === pages}>›</button>
                         </div>
                     )}
@@ -232,7 +306,7 @@ export default function OrdersList() {
                     onClose={() => setSelected(null)}
                     onStatusChange={handleStatusChange}
                     onAssignCourier={handleAssignCourier}
-                    onUpdate={() => { fetchOrders(); setSelected(null); }}
+                    onUpdate={() => { fetchOrders(true); setSelected(null); }}
                     couriers={couriers}
                     updating={updating}
                 />
@@ -358,7 +432,10 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, onU
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                         <InfoCell label="Mijoz" value={order.customerName || '—'} />
-                        <InfoCell label="Telefon" value={order.phone || '—'} />
+                        <InfoCell label="Telefon" value={<span>
+                            <a href={`tel:${order.phone}`} style={{ color: 'var(--primary)' }}>{order.phone || '—'}</a>
+                            {order.extraPhone && <> · <a href={`tel:${order.extraPhone}`} style={{ color: 'var(--primary)' }}>{order.extraPhone}</a></>}
+                        </span>} />
                         <InfoCell label="Yetkazish" value={order.deliveryType === 'delivery' ? '🚗 Yetkazib berish' : '🏃 Olib ketish'} />
                         <InfoCell label="Filial" value={`#${order.branch?.number} ${order.branch?.name || ''}`} />
                         {order.address && <InfoCell label="Manzil" value={order.address} span={2} />}
@@ -376,6 +453,8 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, onU
                                 </a>
                             </div>
                         )}
+                        <InfoCell label="Vaqt" value={(order.deliveryDate || order.deliveryTime) ? `🕐 ${[order.deliveryDate, order.deliveryTime].filter(Boolean).join(' ')}` : '⚡ Imkon qadar tez'} />
+                        <InfoCell label="Yaratilgan" value={new Date(order.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} />
                         {order.notes && <InfoCell label="Izoh" value={order.notes} span={2} />}
                     </div>
 
@@ -430,13 +509,28 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, onU
                             <span style={{ fontWeight: 700 }}>{(item.price * item.qty).toLocaleString()} so'm</span>
                         </div>
                     ))}
+                    {[
+                        ['Yetkazish', order.deliveryCost, ''],
+                        ['Promo chegirma', order.promoDiscount, '−'],
+                        ['Bonus chegirma', order.bonusDiscount, '−'],
+                    ].filter(([, v]) => v > 0).map(([l, v, sign]) => (
+                        <div key={l} style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
+                            <span>{l}</span><span>{sign}{fmt(v)} so'm</span>
+                        </div>
+                    ))}
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontWeight: 800, fontSize: 15 }}>
                         <span>JAMI</span>
                         <span style={{ background: 'linear-gradient(135deg, var(--primary), var(--primary-strong))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{(order.total || 0).toLocaleString()} so'm</span>
                     </div>
 
                     {/* Change status */}
-                    {NEXT_STATUSES[order.status]?.length > 0 && (
+                    {(['cancelled', 'rejected'].includes(order.status) && order.paymentStatus === 'paid' && order.paymentMethod !== 'cash') && (
+                        <div style={{ marginTop: 14, padding: 10, borderRadius: 10, background: 'rgba(231,76,60,0.08)', color: '#e74c3c', fontSize: 13, fontWeight: 600 }}>
+                            ⚠️ Buyurtma onlayn to'langan — pulni {order.paymentMethod === 'payme' ? 'Payme' : 'Click'} kabinetidan mijozga qaytaring.
+                        </div>
+                    )}
+
+                    {(nextStatuses(order).length > 0 || CANCELLABLE.includes(order.status)) && (
                         <div style={{ marginTop: 16 }}>
                             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🔄 Statusni o'zgartirish</div>
                             <input
@@ -447,7 +541,7 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, onU
                                 style={{ marginBottom: 10 }}
                             />
                             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                {NEXT_STATUSES[order.status].map(ns => (
+                                {nextStatuses(order).map(ns => (
                                     <button
                                         key={ns}
                                         className="btn"
@@ -455,9 +549,16 @@ function OrderDetailModal({ order, onClose, onStatusChange, onAssignCourier, onU
                                         onClick={() => onStatusChange(order._id, ns, note)}
                                         style={{ background: ns === 'rejected' ? 'linear-gradient(135deg, #c0392b, #e74c3c)' : 'linear-gradient(135deg, var(--primary), var(--primary-strong))', color: ns === 'rejected' ? '#fff' : '#1a1a24' }}
                                     >
-                                        {STATUS_ICONS[ns]} {STATUS_LABELS[ns]}
+                                        {STATUS_ICONS[ns]} {ns === 'delivered' && order.deliveryType === 'pickup' ? 'Mijozga berildi' : STATUS_LABELS[ns]}
                                     </button>
                                 ))}
+                                {CANCELLABLE.includes(order.status) && (
+                                    <button className="btn btn-outline" disabled={updating}
+                                        onClick={() => onStatusChange(order._id, 'cancelled', note)}
+                                        style={{ color: '#e74c3c', borderColor: 'rgba(231,76,60,0.4)' }}>
+                                        🚫 Bekor qilish
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}

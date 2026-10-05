@@ -10,25 +10,29 @@ import SideMenu from '../components/SideMenu';
 import LangSelect from '../components/LangSelect';
 import { getProductImage } from '../utils/productImage';
 
+// Barcha backend kategoriyalari (config/constants.js) — nomi tarjimadan olinadi
 const CATS = [
-    { key: 'all',      label: 'Barchasi',     icon: '🍽' },
-    { key: 'set_menu', label: 'Setlar',        icon: '🍱' },
-    { key: 'kebab',    label: 'Kebab',         icon: '🥙' },
-    { key: 'doner',    label: 'Döner',         icon: '🌯' },
-    { key: 'burger',   label: 'Burger',        icon: '🍔' },
-    { key: 'pide',     label: 'Pide',          icon: '🫓' },
-    { key: 'izgara',   label: 'Izgara',        icon: '🥩' },
-    { key: 'corba',    label: "Sho'rva",       icon: '🍲' },
-    { key: 'salat',    label: 'Salatlar',      icon: '🥗' },
-    { key: 'pizza',    label: 'Pizza',         icon: '🍕' },
-    { key: 'drink',    label: 'Ichimliklar',   icon: '🥤' },
-    { key: 'dessert',  label: 'Desertlar',     icon: '🍰' },
-    { key: 'garnir',   label: 'Garnirlar',     icon: '🍟' },
+    { key: 'set_menu', icon: '🍱' },
+    { key: 'kebab',    icon: '🥙' },
+    { key: 'doner',    icon: '🌯' },
+    { key: 'burger',   icon: '🍔' },
+    { key: 'pide',     icon: '🫓' },
+    { key: 'izgara',   icon: '🥩' },
+    { key: 'manti',    icon: '🥟' },
+    { key: 'corba',    icon: '🍲' },
+    { key: 'salat',    icon: '🥗' },
+    { key: 'pizza',    icon: '🍕' },
+    { key: 'hot_dog',  icon: '🌭' },
+    { key: 'garnir',   icon: '🍟' },
+    { key: 'sous',     icon: '🧴' },
+    { key: 'drink',    icon: '🥤' },
+    { key: 'dessert',  icon: '🍰' },
+    { key: 'other',    icon: '🍽' },
 ];
 
 // Mahsulotlarni kategoriyalarga guruhlash
 function groupByCategory(products) {
-    const order = CATS.filter(c => c.key !== 'all').map(c => c.key);
+    const order = CATS.map(c => c.key);
     const map = {};
     products.forEach(p => {
         const key = p.category || 'other';
@@ -46,7 +50,7 @@ function groupByCategory(products) {
 export default function Home() {
     const { user } = useAuth();
     const { items, addItem } = useCart();
-    const { lang } = useT();
+    const { lang, t } = useT();
     const navigate = useNavigate();
 
     const [allProducts, setAllProducts] = useState([]);
@@ -132,8 +136,8 @@ export default function Home() {
     }, [groups.map(g => g.key).join(','), search]);
 
     const addressLabel = deliveryType === 'pickup'
-        ? 'Olib ketish'
-        : (savedAddress ? savedAddress.split(',')[0] : 'Manzil tanlang');
+        ? t('pickup')
+        : (savedAddress ? savedAddress.split(',')[0] : t('chooseOnMap'));
 
     // visible cats = only those with products (no "Barchasi")
     const activeCats = groups.map(g => CATS.find(c => c.key === g.key)).filter(Boolean);
@@ -236,7 +240,7 @@ export default function Home() {
                                 transition: 'all 0.2s', whiteSpace: 'nowrap',
                             }}
                         >
-                            {c.icon} {c.label}
+                            {c.icon} {t(`cat_${c.key}`)}
                         </button>
                     );
                 })}
@@ -269,7 +273,7 @@ export default function Home() {
                                         fontWeight: 900, fontSize: 24, color: '#1A1A1A',
                                         padding: '20px 0 14px', letterSpacing: -0.5,
                                     }}>
-                                        {catInfo?.label || group.key}
+                                        {group.key === 'search' ? t('foundCount', { n: group.items.length }) : t(`cat_${group.key}`)}
                                     </div>
                                 )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
@@ -387,7 +391,7 @@ function PromoBannerCard({ promo, lang }) {
     const discountLabel = hasDiscount
         ? (promo.discountType === 'percent'
             ? `-${promo.discountValue}%`
-            : `-${promo.discountValue?.toLocaleString()} so'm`)
+            : `-${Number(promo.discountValue || 0).toLocaleString('ru-RU')}`)
         : null;
     const hasImage = !!promo.imageUrl;
 

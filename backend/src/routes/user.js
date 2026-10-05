@@ -6,7 +6,7 @@ const { authTelegram } = require('../middleware/auth');
 // ─── Profil ───
 router.get('/profile', authTelegram, async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId).select('-__v');
+        const user = await User.findById(req.user.userId).select('-__v -otpCode -otpExpiry -otpSentAt');
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
         res.json(user);
     } catch (err) {
@@ -21,8 +21,15 @@ router.put('/profile', authTelegram, async (req, res) => {
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
-        if (phone) user.phone = phone;
-        if (language) user.language = language;
+        if (phone !== undefined) {
+            const digits = String(phone).replace(/\D/g, '');
+            if (!/^998\d{9}$/.test(digits)) return res.status(400).json({ error: 'Telefon raqam noto\'g\'ri' });
+            user.phone = `+${digits}`;
+        }
+        if (language !== undefined) {
+            if (!['uz', 'ru', 'en'].includes(language)) return res.status(400).json({ error: 'Til noto\'g\'ri' });
+            user.language = language;
+        }
         await user.save();
         res.json(user);
     } catch (err) {
@@ -78,13 +85,33 @@ router.delete('/address/:index', authTelegram, async (req, res) => {
 });
 
 // ─── Sevimlilar ───
+router.get('/favorites', authTelegram, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.userId).populate({
+            path: 'favorites',
+            match: { isActive: true },
+            select: 'name price imageUrl category weight isSpicy isPopular',
+        }).lean();
+        if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+        res.json((user.favorites || []).filter(Boolean));
+    } catch (err) {
+        res.status(500).json({ error: 'Server xatosi' });
+    }
+});
+
 router.post('/favorites/:productId', authTelegram, async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId);
         const pid = req.params.productId;
-        const idx = user.favorites.indexOf(pid);
-        if (idx === -1) user.favorites.push(pid);
-        else user.favorites.splice(idx, 1);
+        if (!require('mongoose').isValidObjectId(pid)) return res.status(400).json({ error: 'Noto\'g\'ri mahsulot' });
+        const user = await User.findById(req.user.userId);
+        if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+        const idx = user.favorites.findIndex(f => String(f) === pid);
+        if (idx === -1) {
+            if (user.favorites.length >= 200) return res.status(400).json({ error: 'Sevimlilar ro\'yxati to\'ldi' });
+            user.favorites.push(pid);
+        } else {
+            user.favorites.splice(idx, 1);
+        }
         await user.save();
         res.json(user.favorites);
     } catch (err) {

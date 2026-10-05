@@ -110,6 +110,9 @@ const orderSchema = new mongoose.Schema({
     dispatchedAt: Date,
     deliveredAt: Date,
     notes: { type: String, default: '' },
+    // Mijoz tanlagan yetkazish vaqti (bo'sh = imkon qadar tez)
+    deliveryDate: { type: String, default: '' }, // YYYY-MM-DD
+    deliveryTime: { type: String, default: '' }, // HH:mm
 }, {
     timestamps: true,
 });
@@ -130,6 +133,8 @@ orderSchema.pre('save', async function (next) {
 });
 
 orderSchema.index({ telegramId: 1 });
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: 1 });
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ branch: 1, status: 1 });
 orderSchema.index({ courierId: 1, deliveredAt: -1 });

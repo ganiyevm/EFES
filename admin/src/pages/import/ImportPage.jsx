@@ -54,10 +54,10 @@ export default function ImportPage() {
                         <div style={{ fontWeight: 600, color: file ? 'var(--primary)' : 'var(--text)' }}>
                             {file ? file.name : 'Excel faylni bu yerga tashlang'}
                         </div>
-                        {!file && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>.xlsx yoki .xls formati</div>}
+                        {!file && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>.xlsx formati</div>}
                     </div>
 
-                    <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
+                    <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }}
                         onChange={e => { if (e.target.files[0]) setFile(e.target.files[0]); }}
                     />
 

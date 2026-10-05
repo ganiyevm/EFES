@@ -3,6 +3,9 @@ const Branch = require('../models/Branch');
 const { authAdmin } = require('../middleware/auth');
 const { getDeliveryConfig, isWithinWorkingHours } = require('../utils/deliveryConfig');
 
+// Mijozlarga operator/kurier Telegram ID'lari ko'rsatilmaydi
+const PUBLIC_FIELDS = 'number name address phone hours isOpen isActive location deliveryRadius minOrderAmount';
+
 // ─── Ish vaqti statusi (public) ───
 router.get('/status', async (req, res) => {
     try {
@@ -23,7 +26,7 @@ router.get('/status', async (req, res) => {
 // ─── Barcha filiallar (public) ───
 router.get('/', async (req, res) => {
     try {
-        const branches = await Branch.find({ isActive: true }).sort({ number: 1 });
+        const branches = await Branch.find({ isActive: true }).select(PUBLIC_FIELDS).sort({ number: 1 }).lean();
         res.json(branches);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -33,7 +36,8 @@ router.get('/', async (req, res) => {
 // ─── Bitta filial ───
 router.get('/:id', async (req, res) => {
     try {
-        const branch = await Branch.findById(req.params.id);
+        if (!require('mongoose').isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Filial topilmadi' });
+        const branch = await Branch.findById(req.params.id).select(PUBLIC_FIELDS).lean();
         if (!branch) return res.status(404).json({ error: 'Filial topilmadi' });
         res.json(branch);
     } catch (err) {
@@ -42,10 +46,28 @@ router.get('/:id', async (req, res) => {
 });
 
 function pickBranchFields(body) {
-    const { name, number, address, phone, isActive, location, deliveryRadius,
-            operatorChatId, operatorIds, workingHours } = body;
-    return { name, number, address, phone, isActive, location, deliveryRadius,
-             operatorChatId, operatorIds, workingHours };
+    const allowed = ['name', 'number', 'address', 'phone', 'hours', 'isOpen', 'isActive', 'location',
+        'deliveryRadius', 'minOrderAmount', 'operatorChatId'];
+    const data = {};
+    for (const k of allowed) if (body[k] !== undefined) data[k] = body[k];
+    for (const k of ['number', 'deliveryRadius', 'minOrderAmount']) {
+        if (data[k] === undefined) continue;
+        const n = Number(data[k]);
+        if (!Number.isFinite(n) || n < 0) {
+            const err = new Error(`${k} manfiy bo'lmagan son bo'lishi kerak`);
+            err.status = 400;
+            throw err;
+        }
+        data[k] = n;
+    }
+    if (data.location) {
+        const lat = Number(data.location.lat) || 0;
+        const lng = Number(data.location.lng) || 0;
+        data.location = { lat, lng };
+    }
+    if (typeof data.name === 'string') data.name = data.name.trim();
+    if (data.operatorChatId === '' ) data.operatorChatId = null;
+    return data;
 }
 
 // ─── Yangi filial (Admin) ───
@@ -61,7 +83,7 @@ router.post('/', authAdmin, async (req, res) => {
 // ─── Tahrirlash (Admin) ───
 router.put('/:id', authAdmin, async (req, res) => {
     try {
-        const branch = await Branch.findByIdAndUpdate(req.params.id, pickBranchFields(req.body), { new: true });
+        const branch = await Branch.findByIdAndUpdate(req.params.id, pickBranchFields(req.body), { new: true, runValidators: true });
         if (!branch) return res.status(404).json({ error: 'Filial topilmadi' });
         res.json(branch);
     } catch (err) {

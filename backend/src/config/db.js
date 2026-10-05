@@ -25,7 +25,7 @@ async function seedOrderCounter() {
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.MONGODB_URI, {
-            maxPoolSize: 3,
+            maxPoolSize: 10,
             minPoolSize: 0,
             socketTimeoutMS: 30000,
             serverSelectionTimeoutMS: 5000,
