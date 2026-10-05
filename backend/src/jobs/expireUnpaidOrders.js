@@ -25,7 +25,10 @@ async function expireUnpaidOrders() {
                 changedBy: 'system',
                 note: "30 daqiqa ichida to'lanmagani uchun avtomatik bekor qilindi",
             });
-            TelegramService.notifyCustomerStatus(order, { note: "To'lov 30 daqiqa ichida amalga oshirilmadi" }).catch(() => {});
+            // Eski (ilgari to'planib qolgan) buyurtmalar uchun mijozni bezovta qilmaymiz
+            if (Date.now() - new Date(order.createdAt).getTime() < 2 * 60 * 60 * 1000) {
+                TelegramService.notifyCustomerStatus(order, { note: "To'lov 30 daqiqa ichida amalga oshirilmadi" }).catch(() => {});
+            }
         } catch (e) {
             console.error('[EXPIRE]', order.orderNumber, e.message);
         }
