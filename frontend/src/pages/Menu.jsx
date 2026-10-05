@@ -126,7 +126,7 @@ export default function Menu() {
                     fontWeight: 800, fontSize: 20, marginBottom: 12,
                     display: 'flex', alignItems: 'center', gap: 8,
                 }}>
-                    <span style={{ color: 'var(--primary-light)' }}>🍽</span> Menyu
+                    <span style={{ color: 'var(--primary-light)' }}>🍽</span> {t('menu')}
                 </div>
 
                 {/* ── Search ── */}

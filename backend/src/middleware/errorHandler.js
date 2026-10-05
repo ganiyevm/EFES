@@ -1,7 +1,9 @@
 const errorHandler = (err, req, res, next) => {
-    console.error('❌ Error:', err.message);
-    res.status(err.status || 500).json({
-        error: err.message || 'Server xatosi',
+    // CORS / JSON parse xatolari 500 emas
+    const status = err.status || err.statusCode || (err.type === 'entity.parse.failed' ? 400 : 500);
+    if (status >= 500) console.error('❌ Error:', err.message);
+    res.status(status).json({
+        error: status >= 500 ? 'Server xatosi' : (err.message || 'So\'rov xatosi'),
     });
 };
 

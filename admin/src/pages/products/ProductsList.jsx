@@ -42,6 +42,7 @@ export default function ProductsList() {
     const [page, setPage] = useState(1);
     const [category, setCategory] = useState('');
     const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null); // null | 'add' | product obj
     const [form, setForm] = useState(EMPTY);
@@ -53,11 +54,13 @@ export default function ProductsList() {
         const params = new URLSearchParams({ page, limit });
         if (category) params.set('category', category);
         if (search) params.set('search', search);
-        api.get(`/products?${params}`)
+        if (statusFilter) params.set('status', statusFilter);
+        // Admin endpoint — nofaol taomlar ham ko'rinadi (aks holda o'chirilgan taomni qayta yoqib bo'lmasdi)
+        api.get(`/admin/products?${params}`)
             .then(r => { setProducts(r.data.products || []); setTotal(r.data.total || 0); })
             .catch(() => { })
             .finally(() => setLoading(false));
-    }, [page, category, search]);
+    }, [page, category, search, statusFilter]);
 
     useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
@@ -68,7 +71,7 @@ export default function ProductsList() {
     };
 
     const handleSave = async () => {
-        if (!form.name.trim() || !form.price) { alert('Nomi va narxi kerak'); return; }
+        if (!form.name.trim() || !(parseInt(form.price) > 0)) { alert('Nomi va narxi (musbat son) kerak'); return; }
         setSaving(true);
         try {
             const payload = { ...form, price: parseInt(form.price), calories: parseInt(form.calories) || 0, prepTime: parseInt(form.prepTime) || 15, vatPercent: parseInt(form.vatPercent) || 12 };
@@ -90,15 +93,15 @@ export default function ProductsList() {
         try {
             await api.put(`/products/${product._id}`, { isActive: !product.isActive });
             fetchProducts();
-        } catch { }
+        } catch (err) { alert(err.response?.data?.error || 'Xatolik'); }
     };
 
     const handleDelete = async (product) => {
-        if (!confirm(`"${product.name}" ni o'chirishni tasdiqlaysizmi?`)) return;
+        if (!confirm(`"${product.name}" butunlay o'chiriladi.\n\nVaqtincha yashirish uchun "Faol" belgisini o'chirish kifoya.\nDavom etasizmi?`)) return;
         try {
             await api.delete(`/products/${product._id}`);
             fetchProducts();
-        } catch { }
+        } catch (err) { alert(err.response?.data?.error || 'Xatolik'); }
     };
 
     const pages = Math.ceil(total / limit);
@@ -119,6 +122,11 @@ export default function ProductsList() {
                 </div>
                 <select className="form-input" style={{ width: 'auto' }} value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}>
                     {CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                </select>
+                <select className="form-input" style={{ width: 'auto' }} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
+                    <option value="">Hammasi</option>
+                    <option value="active">Faol</option>
+                    <option value="inactive">Nofaol</option>
                 </select>
             </div>
 

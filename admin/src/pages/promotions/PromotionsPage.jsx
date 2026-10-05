@@ -2,6 +2,23 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import ImageUploader from '../../components/ImageUploader';
 
+// datetime-local input mahalliy vaqtni kutadi; toISOString() UTC beradi va har
+// saqlashda vaqt 5 soatga siljirdi. Shu sababli mahalliy formatlash.
+function toLocalInput(d) {
+    if (!d) return '';
+    const x = new Date(d);
+    if (isNaN(x)) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
+}
+
+const CATEGORY_OPTIONS = [
+    ['kebab', '🥙 Kebab'], ['doner', '🌯 Döner'], ['pide', '🫓 Pide'], ['izgara', '🥩 Izgara'],
+    ['corba', "🍲 Sho'rva"], ['manti', '🥟 Manti'], ['burger', '🍔 Burger'], ['pizza', '🍕 Pizza'],
+    ['hot_dog', '🌭 Hot Dog'], ['salat', '🥗 Salat'], ['drink', '🥤 Ichimlik'], ['dessert', '🍰 Desert'],
+    ['garnir', '🍟 Garnir'], ['sous', '🧴 Sous'], ['set_menu', '🍱 Set'], ['other', 'Boshqa'],
+];
+
 const EMPTY = {
     title: { uz: '', ru: '', en: '' },
     description: { uz: '', ru: '', en: '' },
@@ -11,9 +28,10 @@ const EMPTY = {
     minOrderAmount: 0,
     maxDiscount: 0,
     promoCode: '',
-    startDate: new Date().toISOString().slice(0, 16),
+    startDate: '',
     endDate: '',
     isActive: true,
+    applicableCategories: [],
     usageLimit: 0,
     sortOrder: 0,
 };
@@ -41,8 +59,8 @@ export default function PromotionsPage() {
         end.setMonth(end.getMonth() + 1);
         setForm({
             ...EMPTY,
-            startDate: now.toISOString().slice(0, 16),
-            endDate: end.toISOString().slice(0, 16),
+            startDate: toLocalInput(now),
+            endDate: toLocalInput(end),
         });
         setTab('uz');
         setModal('add');
@@ -53,8 +71,9 @@ export default function PromotionsPage() {
             ...EMPTY, ...p,
             title: { uz: p.title?.uz || '', ru: p.title?.ru || '', en: p.title?.en || '' },
             description: { uz: p.description?.uz || '', ru: p.description?.ru || '', en: p.description?.en || '' },
-            startDate: p.startDate ? new Date(p.startDate).toISOString().slice(0, 16) : '',
-            endDate: p.endDate ? new Date(p.endDate).toISOString().slice(0, 16) : '',
+            startDate: toLocalInput(p.startDate),
+            endDate: toLocalInput(p.endDate),
+            applicableCategories: p.applicableCategories || [],
         });
         setTab('uz');
         setModal(p);
@@ -62,12 +81,14 @@ export default function PromotionsPage() {
 
     const handleSave = async () => {
         if (!form.title.uz) { alert('Sarlavha (UZ) kerak'); return; }
+        if (form.discountType === 'percent' && form.discountValue > 100) { alert('Foiz 100 dan oshmasligi kerak'); return; }
+        if (form.endDate && form.startDate && new Date(form.endDate) < new Date(form.startDate)) { alert('Tugash sanasi boshlanishdan oldin'); return; }
         // discountValue ixtiyoriy — 0 ham bo'lishi mumkin
         setSaving(true);
         try {
             const payload = {
                 ...form,
-                promoCode: form.promoCode?.toUpperCase().trim(),
+                promoCode: form.promoCode?.toUpperCase().replace(/\s+/g, ''),
                 startDate: form.startDate ? new Date(form.startDate) : new Date(),
                 endDate: form.endDate ? new Date(form.endDate) : null,
             };
@@ -90,7 +111,7 @@ export default function PromotionsPage() {
         try {
             await api.delete(`/promotions/admin/${id}`);
             fetchPromos();
-        } catch { }
+        } catch (err) { alert(err.response?.data?.error || 'Xatolik'); }
     };
 
     const handleToggle = async (p) => {
@@ -285,6 +306,26 @@ export default function PromotionsPage() {
                                         onChange={e => setField('promoCode', e.target.value.toUpperCase())}
                                         placeholder="EFES10" style={{ fontFamily: 'monospace', letterSpacing: 2 }} />
                                 </div>
+                                {/* Kategoriyalar */}
+                                {form.promoCode && (
+                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                        <label className="form-label">Faqat shu kategoriyalarga (bo'sh = hammasiga)</label>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                            {CATEGORY_OPTIONS.map(([k, l]) => {
+                                                const on = (form.applicableCategories || []).includes(k);
+                                                return (
+                                                    <button type="button" key={k} className="btn btn-sm"
+                                                        onClick={() => setField('applicableCategories', on
+                                                            ? form.applicableCategories.filter(c => c !== k)
+                                                            : [...(form.applicableCategories || []), k])}
+                                                        style={{ background: on ? 'var(--primary)' : 'var(--card)', color: on ? '#1a1a24' : 'var(--text)', border: '1px solid var(--border)' }}>
+                                                        {l}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                                 {/* Usage limit */}
                                 <div className="form-group">
                                     <label className="form-label">Foydalanish limiti (0=cheksiz)</label>

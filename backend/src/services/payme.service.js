@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const BonusService = require('./bonus.service');
 const SseService = require('./sse.service');
+const OrderStatusService = require('./orderStatus.service');
 
 // Payme transaction timeout — 12 soat (ms)
 const TRANSACTION_TIMEOUT = 12 * 60 * 60 * 1000;
@@ -59,7 +60,11 @@ class PaymeService {
     // ─── JSON-RPC handler ───
     static async handleRequest(req) {
         const { method, params, id } = req.body;
-        console.log(`[PAYME] method=${method} params=${JSON.stringify(params)}`);
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[PAYME] method=${method} params=${JSON.stringify(params)}`);
+        } else {
+            console.log(`[PAYME] method=${method}`);
+        }
 
         if (!PaymeService.checkAuth(req)) {
             console.error('[PAYME] AUTH FAILED');
@@ -91,24 +96,37 @@ class PaymeService {
         const order = await PaymeService.findOrder(params.account?.order_id);
         if (!order) return { error: { code: -31050, message: { uz: 'Buyurtma topilmadi' } }, id };
         if (order.paymentStatus === 'paid') return { error: { code: -31051, message: { uz: "Allaqachon to'langan" } }, id };
-        if (order.status === 'cancelled') return { error: { code: -31099, message: { uz: 'Bekor qilingan' } }, id };
+        if (order.paymentMethod !== 'payme' || ['cancelled', 'rejected'].includes(order.status)) {
+            return { error: { code: -31099, message: { uz: 'Bekor qilingan' } }, id };
+        }
         if (params.amount !== order.total * 100) return { error: { code: -31001, message: { uz: "Noto'g'ri summa" } }, id };
 
-        // Fiskal chek uchun detail object
-        const detail = {
-            receipt_type: 0,
-            items: order.items.map(item => {
-                const entry = {
-                    title: item.productName,
-                    price: item.price * 100,   // tiyinda
-                    count: item.qty,
-                    code: item.mxikCode || '',
-                    package_code: item.packageCode || '',
-                    vat_percent: item.vatPercent ?? 12,
-                };
-                return entry;
-            }),
-        };
+        // Fiskal chek uchun detail object.
+        // Payme chekdagi summa (items − discount + shipping) to'lov summasiga teng bo'lishi shart,
+        // shuning uchun promo/bonus chegirmasi qatorlarga proporsional taqsimlanadi.
+        const lines = order.items.map(item => ({
+            title: item.productName,
+            price: item.price * 100,   // tiyinda
+            count: item.qty,
+            code: item.mxikCode || '',
+            package_code: item.packageCode || '',
+            vat_percent: item.vatPercent ?? 12,
+        }));
+        const totalDiscount = ((order.promoDiscount || 0) + (order.bonusDiscount || 0)) * 100;
+        if (totalDiscount > 0) {
+            const gross = lines.reduce((s, l) => s + l.price * l.count, 0);
+            let left = Math.min(totalDiscount, gross);
+            lines.forEach((l, i) => {
+                const lineTotal = l.price * l.count;
+                const share = i === lines.length - 1
+                    ? left
+                    : Math.min(left, Math.floor(totalDiscount * lineTotal / gross));
+                const applied = Math.min(share, lineTotal);
+                if (applied > 0) l.discount = applied;
+                left -= applied;
+            });
+        }
+        const detail = { receipt_type: 0, items: lines };
 
         // Yetkazib berish xarajati bo'lsa
         if (order.deliveryCost > 0) {
@@ -160,7 +178,7 @@ class PaymeService {
         if (order.paymentStatus === 'paid') {
             return { error: { code: -31051, message: { uz: "Allaqachon to'langan" } }, id };
         }
-        if (order.status === 'cancelled') {
+        if (order.paymentMethod !== 'payme' || ['cancelled', 'rejected'].includes(order.status)) {
             return { error: { code: -31099, message: { uz: 'Bekor qilingan' } }, id };
         }
 
@@ -194,6 +212,11 @@ class PaymeService {
             order.paymentStatus = 'failed';
             await order.save();
             return { error: { code: -31008, message: { uz: "Vaqt o'tgan" } }, id };
+        }
+
+        // Tranzaksiya ochilgandan keyin mijoz buyurtmani bekor qilgan bo'lsa — to'lovni qabul qilmaymiz
+        if (['cancelled', 'rejected'].includes(order.status)) {
+            return { error: { code: -31008, message: { uz: 'Buyurtma bekor qilingan' } }, id };
         }
 
         const performTime = Date.now();
@@ -234,26 +257,23 @@ class PaymeService {
         if (order.paymeState === 1) {
             order.paymeState = -1;
             order.paymentStatus = 'failed';
-            order.status = 'cancelled';
         } else if (order.paymeState === 2) {
             order.paymeState = -2;
             order.paymentStatus = 'refunded';
-            order.status = 'cancelled';
-            // Bonusni qaytarish
-            if (order.bonusDiscount > 0) {
-                try {
-                    const user = await User.findById(order.user);
-                    if (user) await BonusService.refundBonus(user, order);
-                } catch (e) { console.error('[PAYME] Bonus refund error:', e.message); }
-            }
         } else {
             return { error: { code: -31007, message: { uz: "Bekor qilib bo'lmaydi" } }, id };
         }
 
         order.paymeCancelTime = cancelTime;
         order.paymeReason = params.reason;
-        order.statusHistory.push({ status: 'cancelled', changedBy: 'system', note: `Payme CancelTransaction: reason=${params.reason || ''}` });
-        await order.save();
+        const note = `Payme CancelTransaction: reason=${params.reason ?? ''}`;
+        if (['cancelled', 'rejected'].includes(order.status)) {
+            order.statusHistory.push({ status: order.status, changedBy: 'system', note });
+            await order.save();
+        } else {
+            // Markaziy servis: bonus/promo qaytariladi, kurier xabarlari tozalanadi
+            await OrderStatusService.applyTransition(order, 'cancelled', { changedBy: 'system', note, force: true });
+        }
 
         return { result: { cancel_time: cancelTime, transaction: order._id.toString(), state: order.paymeState }, id };
     }

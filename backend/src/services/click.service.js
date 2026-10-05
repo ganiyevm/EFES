@@ -3,6 +3,10 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const BonusService = require('./bonus.service');
 const SseService = require('./sse.service');
+const OrderStatusService = require('./orderStatus.service');
+
+// Maxfiy ma'lumot (sign_string, trans_id) faqat production'dan tashqarida loglanadi.
+const isDev = process.env.NODE_ENV !== 'production';
 
 /**
  * Click sign formula (rasmiy):
@@ -17,7 +21,7 @@ function generateSign({ click_trans_id, service_id, merchant_trans_id, merchant_
 class ClickService {
     // ─── Prepare (action=0) ───
     static async prepare(body) {
-        console.log('[CLICK PREPARE]', JSON.stringify(body));
+        if (isDev) console.log('[CLICK PREPARE]', JSON.stringify(body));
         try {
             const { click_trans_id, service_id, merchant_trans_id, amount, action, sign_time, sign_string } = body;
 
@@ -28,7 +32,7 @@ class ClickService {
                 amount, action, sign_time,
             });
             if (expectedSign !== sign_string) {
-                console.error('[CLICK PREPARE] SIGN FAILED', { expected: expectedSign, got: sign_string });
+                console.error('[CLICK PREPARE] SIGN CHECK FAILED', isDev ? { expected: expectedSign, got: sign_string } : '');
                 return { error: -1, error_note: 'SIGN CHECK FAILED', click_trans_id, merchant_trans_id };
             }
             if (parseInt(action) !== 0) {
@@ -39,6 +43,9 @@ class ClickService {
             if (!order) return { error: -5, error_note: 'Order not found', click_trans_id, merchant_trans_id };
             if (order.paymentStatus === 'paid') {
                 return { error: -4, error_note: 'Already paid', click_trans_id, merchant_trans_id };
+            }
+            if (order.paymentMethod !== 'click' || ['cancelled', 'rejected'].includes(order.status)) {
+                return { error: -9, error_note: 'Transaction cancelled', click_trans_id, merchant_trans_id };
             }
             if (Math.abs(parseFloat(amount) - order.total) > 0.01) {
                 return { error: -2, error_note: 'Incorrect amount', click_trans_id, merchant_trans_id };
@@ -62,7 +69,7 @@ class ClickService {
 
     // ─── Complete (action=1) ───
     static async complete(body) {
-        console.log('[CLICK COMPLETE]', JSON.stringify(body));
+        if (isDev) console.log('[CLICK COMPLETE]', JSON.stringify(body));
         try {
             const { click_trans_id, service_id, merchant_trans_id, merchant_prepare_id, amount, action, sign_time, sign_string, error } = body;
 
@@ -73,7 +80,7 @@ class ClickService {
                 amount, action, sign_time,
             });
             if (expectedSign !== sign_string) {
-                console.error('[CLICK COMPLETE] SIGN FAILED', { expected: expectedSign, got: sign_string });
+                console.error('[CLICK COMPLETE] SIGN CHECK FAILED', isDev ? { expected: expectedSign, got: sign_string } : '');
                 return { error: -1, error_note: 'SIGN CHECK FAILED', click_trans_id, merchant_trans_id };
             }
             if (parseInt(action) !== 1) {
@@ -95,10 +102,19 @@ class ClickService {
             // Foydalanuvchi bekor qildi yoki Click xatolik
             if (parseInt(error) < 0) {
                 order.paymentStatus = 'failed';
-                order.status = 'cancelled';
-                order.statusHistory.push({ status: 'cancelled', changedBy: 'system', note: `Click xatolik: ${error}` });
-                await order.save();
+                if (order.status === 'awaiting_payment') {
+                    // Markaziy servis: bonus/promo qaytariladi, SSE yuboriladi
+                    await OrderStatusService.applyTransition(order, 'cancelled', {
+                        changedBy: 'system',
+                        note: `Click to'lovi amalga oshmadi (kod: ${error})`,
+                    });
+                } else {
+                    await order.save();
+                }
                 return { error: -9, error_note: 'Payment failed', click_trans_id, merchant_trans_id };
+            }
+            if (['cancelled', 'rejected'].includes(order.status)) {
+                return { error: -9, error_note: 'Transaction cancelled', click_trans_id, merchant_trans_id };
             }
 
             await ClickService.confirmPayment(order);
@@ -118,8 +134,15 @@ class ClickService {
     static async confirmPayment(order) {
         if (order.paymentStatus === 'paid') return;
         order.paymentStatus = 'paid';
-        order.status = 'pending_operator';
-        order.statusHistory.push({ status: 'pending_operator', changedBy: 'system', note: "Click orqali to'lov tasdiqlandi" });
+        if (order.status === 'awaiting_payment') {
+            order.status = 'pending_operator';
+            order.statusHistory.push({ status: 'pending_operator', changedBy: 'system', note: "Click orqali to'lov tasdiqlandi" });
+        } else {
+            // Bekor qilingan buyurtma keyin to'langan bo'lsa — qayta tiklamaymiz, admin pulni qaytaradi
+            order.statusHistory.push({ status: order.status, changedBy: 'system', note: "Click to'lovi keldi — buyurtma faol emas, pulni qaytarish kerak" });
+            await order.save();
+            return;
+        }
         await order.save();
 
         // Bonus

@@ -3,6 +3,8 @@ const Courier = require('../models/Courier');
 const Order = require('../models/Order');
 const OrderStatusService = require('./orderStatus.service');
 const TelegramService = require('./telegram.service');
+const { escapeHtml: h } = require('../utils/html');
+const { tashkentDayStart } = require('../utils/time');
 
 // ─── Ikki-bot arxitektura ────────────────────────────────────────────────
 // BROADCAST bot (all_bot): buyurtma barcha smena'dagi kurierlarga yuboriladi.
@@ -17,7 +19,7 @@ const BROADCAST_USERNAME = process.env.COURIER_BOT_USERNAME || 'efes_kebab_dasta
 const MISSION_TOKEN = process.env.COURIER_MISSION_BOT_TOKEN;
 const MISSION_USERNAME = process.env.COURIER_MISSION_BOT_USERNAME || 'efes_kebab_dastafka_bot';
 const BASE_URL = process.env.BASE_URL || '';
-const WEBHOOK_SECRET = process.env.COURIER_WEBHOOK_SECRET || 'efes_courier_webhook_secret';
+const WEBHOOK_SECRET = process.env.COURIER_WEBHOOK_SECRET;
 
 // Qabul qilinmagan buyurtma uchun operator ogohlantirish vaqti (ms)
 const UNACCEPTED_TIMEOUT_MS = 5 * 60 * 1000;
@@ -103,35 +105,41 @@ function yandexMapsButton(order) {
 
 function formatBroadcast(order) {
     const items = order.items
-        .map(i => `  • ${i.productName} x${i.qty}${i.note ? ` (${i.note})` : ''}`)
+        .map(i => `  • ${h(i.productName)} x${i.qty}${i.note ? ` (${h(i.note)})` : ''}`)
         .join('\n');
     const addrLine = order.deliveryType === 'delivery'
-        ? `🚗 <b>Manzil:</b> ${order.address || '—'}`
+        ? `🚗 <b>Manzil:</b> ${h(order.address || '—')}`
         : '🏃 <b>Olib ketish</b>';
-    const payLabel = PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod;
+    const payLabel = PAYMENT_LABELS[order.paymentMethod] || h(order.paymentMethod);
+    const cashLine = order.paymentMethod === 'cash' && order.paymentStatus !== 'paid'
+        ? `\n💵 Mijozdan olinadi: <b>${order.total.toLocaleString('ru-RU')} so'm</b>` : '';
+    const schedule = [order.deliveryDate, order.deliveryTime].filter(Boolean).join(' ');
 
     return `📦 <b>Yangi buyurtma!</b>\n\n` +
-        `📋 <b>${order.orderNumber}</b>\n` +
-        `👤 ${order.customerName}\n` +
-        `📞 ${order.phone}\n\n` +
+        `📋 <b>${h(order.orderNumber)}</b>\n` +
+        `👤 ${h(order.customerName)}\n` +
+        `📞 ${h(order.phone)}${order.extraPhone ? ` · ${h(order.extraPhone)}` : ''}\n\n` +
         `🍽 <b>Taomlar:</b>\n${items}\n\n` +
-        `💰 Jami: <b>${order.total.toLocaleString()} so'm</b>\n` +
-        `💳 To'lov: ${payLabel}\n` +
+        `💰 Jami: <b>${order.total.toLocaleString('ru-RU')} so'm</b>\n` +
+        `💳 To'lov: ${payLabel}${order.paymentStatus === 'paid' ? ' ✅ to\'langan' : ''}` + cashLine + '\n' +
         `${addrLine}` +
-        (order.notes ? `\n📝 Izoh: ${order.notes}` : '');
+        (schedule ? `\n🕐 Vaqt: <b>${h(schedule)}</b>` : '') +
+        (order.notes ? `\n📝 Izoh: ${h(order.notes)}` : '');
 }
 
 function formatMission(order, statusLabel) {
     const addrLine = order.deliveryType === 'delivery'
-        ? `🚗 <b>Manzil:</b> ${order.address || '—'}`
+        ? `🚗 <b>Manzil:</b> ${h(order.address || '—')}`
         : '🏃 <b>Olib ketish</b>';
-    const payLabel = PAYMENT_LABELS[order.paymentMethod] || order.paymentMethod;
+    const payLabel = PAYMENT_LABELS[order.paymentMethod] || h(order.paymentMethod);
+    const paidMark = order.paymentStatus === 'paid' ? ' ✅ to\'langan' : (order.paymentMethod === 'cash' ? ' — mijozdan oling' : '');
     return `✅ <b>Buyurtma sizda</b>\n\n` +
-        `📋 <b>${order.orderNumber}</b>\n` +
-        `👤 ${order.customerName}\n` +
-        `📞 ${order.phone}\n` +
+        `📋 <b>${h(order.orderNumber)}</b>\n` +
+        `👤 ${h(order.customerName)}\n` +
+        `📞 ${h(order.phone)}${order.extraPhone ? ` · ${h(order.extraPhone)}` : ''}\n` +
         `${addrLine}\n` +
-        `💰 <b>${order.total.toLocaleString()} so'm</b> · ${payLabel}\n\n` +
+        (order.notes ? `📝 ${h(order.notes)}\n` : '') +
+        `💰 <b>${order.total.toLocaleString('ru-RU')} so'm</b> · ${payLabel}${paidMark}\n\n` +
         `📍 <b>Holat:</b> ${statusLabel}`;
 }
 
@@ -170,13 +178,17 @@ class CourierBotService {
             console.warn('⚠️  Kurier bot: BASE_URL yo\'q, webhook o\'tkazib yuborildi');
             return;
         }
+        if (!WEBHOOK_SECRET) {
+            console.warn('⚠️  Kurier bot: COURIER_WEBHOOK_SECRET yo\'q, webhook o\'rnatilmadi');
+            return;
+        }
         if (broadcastApi) {
             const r = await tgCall(broadcastApi, '/setWebhook', {
                 url: `${BASE_URL}${BROADCAST_PATH}`,
                 secret_token: WEBHOOK_SECRET,
                 allowed_updates: ['message', 'callback_query'],
             });
-            console.log('✅ Broadcast bot webhook:', r !== null ? `${BASE_URL}${BROADCAST_PATH}` : 'XATO');
+            console.log(r !== null ? `✅ Broadcast bot webhook: ${BASE_URL}${BROADCAST_PATH}` : '❌ Broadcast bot webhook o\'rnatilmadi');
         }
         if (missionApi) {
             const r = await tgCall(missionApi, '/setWebhook', {
@@ -184,13 +196,15 @@ class CourierBotService {
                 secret_token: WEBHOOK_SECRET,
                 allowed_updates: ['message', 'callback_query'],
             });
-            console.log('✅ Mission bot webhook:', r !== null ? `${BASE_URL}${MISSION_PATH}` : 'XATO');
+            console.log(r !== null ? `✅ Mission bot webhook: ${BASE_URL}${MISSION_PATH}` : '❌ Mission bot webhook o\'rnatilmadi');
         }
     }
 
     // ─── Yangi buyurtma broadcast (faqat smena'dagi kurierlarga) ────────
     static async broadcastNewOrder(order) {
         if (!broadcastApi) return;
+        // Olib ketish buyurtmalari kurierga kerak emas
+        if (order.deliveryType !== 'delivery') return;
 
         const couriers = await Courier.find({
             isActive: true,
@@ -240,8 +254,8 @@ class CourierBotService {
             if (!['confirmed', 'preparing', 'ready'].includes(order.status)) return;
 
             const text = `⚠️ <b>Buyurtma ${UNACCEPTED_TIMEOUT_MS / 60000} daqiqa davomida qabul qilinmadi!</b>\n\n` +
-                `📋 <b>${order.orderNumber}</b>\n` +
-                `👤 ${order.customerName} | 📞 ${order.phone}\n` +
+                `📋 <b>${h(order.orderNumber)}</b>\n` +
+                `👤 ${h(order.customerName)} | 📞 ${h(order.phone)}\n` +
                 `💰 ${order.total.toLocaleString()} so'm\n\n` +
                 `Hech bir kurier smena'da yo'q yoki buyurtmani qabul qilmayapti.\n` +
                 `Admin paneldan qo'lda kurier tayinlang.`;
@@ -263,7 +277,7 @@ class CourierBotService {
             if (!branch?.operatorChatId) return;
 
             const text = `⚠️ <b>Smena'da faol kurier yo'q!</b>\n\n` +
-                `📋 <b>${order.orderNumber}</b> — ${order.customerName}\n` +
+                `📋 <b>${h(order.orderNumber)}</b> — ${h(order.customerName)}\n` +
                 `💰 ${order.total.toLocaleString()} so'm\n\n` +
                 `Kurierlarni smena'ga undang yoki qo'lda tayinlang.`;
 
@@ -271,6 +285,15 @@ class CourierBotService {
         } catch (e) {
             console.error('_notifyNoActiveCouriers:', e.message);
         }
+    }
+
+    // Bekor qilingan/rad etilgan buyurtma haqida biriktirilgan kurierga xabar
+    static async notifyCourierCancelled(order) {
+        if (!missionApi || !order.courierId) return;
+        const courier = await Courier.findById(order.courierId).select('telegramId').lean();
+        if (!courier?.telegramId) return;
+        await sendMessage(missionApi, courier.telegramId,
+            `🚫 <b>${h(order.orderNumber)}</b> bekor qilindi.\n\nBu buyurtmani yetkazmang.`);
     }
 
     static async clearBroadcasts(orderId) {
@@ -426,9 +449,9 @@ class CourierBotService {
             ? `\n\n🎁 +${courier.bonusPerDelivery.toLocaleString()} so'm bonus hisoblandi`
             : '';
         const finalText = `🎉 <b>Yetkazib berildi</b>\n\n` +
-            `📋 <b>${order.orderNumber}</b>\n` +
-            `👤 ${order.customerName}\n` +
-            `💰 ${order.total.toLocaleString()} so'm` +
+            `📋 <b>${h(order.orderNumber)}</b>\n` +
+            `👤 ${h(order.customerName)}\n` +
+            `💰 ${order.total.toLocaleString('ru-RU')} so'm` +
             bonusLine;
 
         if (chatId && messageId) {
@@ -481,7 +504,7 @@ class CourierBotService {
         });
         if (activeOrder) {
             await sendMessage(broadcastApi, chatId,
-                `⚠️ Sizda hali tugallanmagan buyurtma bor: <b>${activeOrder.orderNumber}</b>\n\n` +
+                `⚠️ Sizda hali tugallanmagan buyurtma bor: <b>${h(activeOrder.orderNumber)}</b>\n\n` +
                 `Avval uni yetkazib bering, keyin smenani tugatishingiz mumkin.`
             );
             return;
@@ -494,7 +517,7 @@ class CourierBotService {
         const todayDeliveries = await Order.countDocuments({
             courierId: courier._id,
             status: 'delivered',
-            deliveredAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+            deliveredAt: { $gte: tashkentDayStart() },
         });
 
         await sendMessage(broadcastApi, chatId,
@@ -532,7 +555,7 @@ class CourierBotService {
             );
             if (courier) {
                 await sendMessage(broadcastApi, chatId,
-                    `✅ <b>${courier.name}</b>, xush kelibsiz!\n\n` +
+                    `✅ <b>${h(courier.name)}</b>, xush kelibsiz!\n\n` +
                     `Yangi buyurtmalar shu yerda ko'rinadi.\n\n` +
                     `Smena boshlash: /smena_boshlash\n\n` +
                     `⚠️ <b>Muhim:</b> yetkazib berishni boshqarish uchun ` +
@@ -548,7 +571,7 @@ class CourierBotService {
         const existing = await Courier.findOne({ telegramId: from.id, isActive: true });
         if (existing) {
             await sendMessage(broadcastApi, chatId,
-                `Salom, <b>${existing.name}</b>!\n\n` +
+                `Salom, <b>${h(existing.name)}</b>!\n\n` +
                 formatShiftStatus(existing) + '\n\n' +
                 `Yetkazib berishni boshqarish: <a href="https://t.me/${MISSION_USERNAME}">@${MISSION_USERNAME}</a>`,
             );
@@ -582,7 +605,7 @@ class CourierBotService {
 
         if (activeOrders.length === 0) {
             await sendMessage(missionApi, chatId,
-                `✅ Salom, <b>${existing.name}</b>!\n\n` +
+                `✅ Salom, <b>${h(existing.name)}</b>!\n\n` +
                 `Hozircha aktiv buyurtma yo'q.\n` +
                 `Yangi buyurtmalar @${BROADCAST_USERNAME} botida ko'rinadi.`,
             );
@@ -590,7 +613,7 @@ class CourierBotService {
         }
 
         await sendMessage(missionApi, chatId,
-            `✅ Salom, <b>${existing.name}</b>! Sizda <b>${activeOrders.length}</b> ta aktiv buyurtma bor:`,
+            `✅ Salom, <b>${h(existing.name)}</b>! Sizda <b>${activeOrders.length}</b> ta aktiv buyurtma bor:`,
         );
 
         for (const order of activeOrders) {

@@ -1,4 +1,5 @@
 import { useAuth } from './context/AuthContext';
+import { extraTranslations } from './i18nExtra';
 
 const translations = {
     uz: {
@@ -533,9 +534,17 @@ const translations = {
 export function useT() {
     const { user } = useAuth();
     const lang = user?.language || localStorage.getItem('efes_lang') || 'uz';
-    const t = (key) => {
-        const val = translations[lang]?.[key] ?? translations['uz']?.[key] ?? key;
+    // t('key') yoki t('key', { n: 3 }) — {n} o'rniga qiymat qo'yiladi
+    const t = (key, vars) => {
+        let val = translations[lang]?.[key] ?? extraTranslations[lang]?.[key]
+            ?? translations.uz?.[key] ?? extraTranslations.uz?.[key] ?? key;
+        if (vars && typeof val === 'string') {
+            val = val.replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined ? vars[k] : m));
+        }
         return val;
     };
     return { t, lang };
 }
+
+// Pul summasi: 125 000 (barcha tillarda bo'shliq bilan)
+export const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');

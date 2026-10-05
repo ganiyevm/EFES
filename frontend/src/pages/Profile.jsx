@@ -4,6 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { useT } from '../i18n';
 import api from '../api';
 import BottomNav from '../components/BottomNav';
+import { useCart } from '../context/CartContext';
+import { fmt } from '../i18n';
+import { getProductImage } from '../utils/productImage';
 
 export default function Profile() {
     const { user, setUser, error: authError, authenticate } = useAuth();
@@ -17,6 +20,14 @@ export default function Profile() {
     const [profileForm, setProfileForm] = useState({ firstName: user?.firstName || '', lastName: user?.lastName || '', phone: user?.phone || '+998' });
     const [profileError, setProfileError] = useState('');
     const [profileSaving, setProfileSaving] = useState(false);
+
+    // Bonus balansi va buyurtmalar soni eskirmasligi uchun profilni yangilash
+    useEffect(() => {
+        if (!user) return;
+        api.get('/user/profile').then(r => {
+            if (r.data) { setUser(r.data); setAddresses(r.data.addresses || []); }
+        }).catch(() => { });
+    }, [!!user]);
 
     if (!user) return (
         <div className="profile-auth-state">
@@ -115,6 +126,14 @@ export default function Profile() {
     }
 
     // ── Addresses ──
+    if (page === 'favorites') {
+        return (
+            <SubPage title={`❤️ ${t('favorites')}`} onBack={() => setPage(null)}>
+                <FavoritesList t={t} navigate={navigate} />
+            </SubPage>
+        );
+    }
+
     if (page === 'addresses') {
         return (
             <SubPage title={`📍 ${t('addressesTitle')}`} onBack={() => setPage(null)}>
@@ -177,7 +196,7 @@ export default function Profile() {
                 <MenuItem icon="📋" label={t('myOrders')} onPress={() => navigate('/orders')} />
                 <MenuItem icon="🎁" label={t('bonusLabel')} onPress={() => setPage('bonus')} badge={user.bonusPoints > 0 ? `${user.bonusPoints}` : null} />
                 <MenuItem icon="📍" label={t('myAddresses')} onPress={() => setPage('addresses')} />
-                <MenuItem icon="❤️" label={t('favorites')} onPress={() => navigate('/menu')} />
+                <MenuItem icon="❤️" label={t('favorites')} onPress={() => setPage('favorites')} badge={user.favorites?.length ? `${user.favorites.length}` : null} />
 
                 <div style={{ marginTop: 20, marginBottom: 10, fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase' }}>⚙️ {t('settings')}</div>
 
@@ -296,16 +315,16 @@ function BonusTxList({ uid, t }) {
                     marginBottom: 8, fontSize: 13,
                 }}>
                     <div>
-                        <div style={{ fontWeight: 600 }}>{tx.description || (tx.type === 'earn' ? '+ Ball' : '- Ball')}</div>
+                        <div style={{ fontWeight: 600 }}>{tx.description || (tx.type === 'earned' ? '+ Ball' : '- Ball')}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
                             {new Date(tx.createdAt).toLocaleDateString()}
                         </div>
                     </div>
                     <div style={{
                         fontWeight: 800, fontSize: 16,
-                        color: tx.type === 'earn' ? '#2ecc71' : '#e74c3c',
+                        color: tx.type === 'earned' ? '#2ecc71' : '#e74c3c',
                     }}>
-                        {tx.type === 'earn' ? '+' : '−'}{tx.amount}
+                        {tx.type === 'earned' ? '+' : '−'}{fmt(tx.amount)}
                     </div>
                 </div>
             ))}
@@ -403,3 +422,35 @@ const iStyle = {
     outline: 'none', fontFamily: 'inherit', transition: 'all 0.25s',
 };
 
+
+function FavoritesList({ t, navigate }) {
+    const [items, setItems] = useState(null);
+    const { addItem } = useCart();
+    useEffect(() => {
+        api.get('/user/favorites').then(r => setItems(r.data || [])).catch(() => setItems([]));
+    }, []);
+    if (items === null) return <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><div className="spinner" /></div>;
+    if (!items.length) return (
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 30 }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🤍</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>{t('favoritesEmpty')}</div>
+            <div style={{ fontSize: 13 }}>{t('favoritesEmptyHint')}</div>
+        </div>
+    );
+    return items.map(p => (
+        <div key={p._id} onClick={() => navigate(`/product/${p._id}`)} style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: 10, marginBottom: 8,
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, cursor: 'pointer',
+        }}>
+            <img src={getProductImage(p)} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--primary-light)', fontWeight: 700, marginTop: 2 }}>{fmt(p.price)} {t('sum')}</div>
+            </div>
+            <button onClick={e => { e.stopPropagation(); addItem(p); }} aria-label={t('addToCart')} style={{
+                width: 36, height: 36, borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 18,
+                background: 'linear-gradient(135deg, var(--primary), var(--primary-light))', color: '#1a1a24',
+            }}>+</button>
+        </div>
+    ));
+}

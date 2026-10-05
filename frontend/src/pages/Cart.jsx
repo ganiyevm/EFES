@@ -1,14 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
+import { useCart, MAX_QTY } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { useT } from '../i18n';
+import { useT, fmt } from '../i18n';
 import api from '../api';
 import BottomNav from '../components/BottomNav';
 import MapModal from '../components/MapModal';
 import { PaymentIcon } from '../components/BrandIcon';
-
-const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'efes_kebab_bot';
 
 function haversineKm(lat1, lng1, lat2, lng2) {
     const R = 6371;
@@ -19,27 +17,29 @@ function haversineKm(lat1, lng1, lat2, lng2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const PAY_METHODS = [
-    { key: 'payme', label: 'Payme' },
-    { key: 'click', label: 'Click' },
-    { key: 'cash', label: 'Naqd' },
-];
+const hasLoc = (b) => !!(b.location?.lat && b.location?.lng);
+
+// Toshkent vaqti bo'yicha bugungi sana (YYYY-MM-DD) va hozirgi soat (HH:mm)
+function tashkentNow() {
+    const d = new Date(Date.now() + 5 * 3600 * 1000);
+    return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) };
+}
+
+function initialPhone(user) {
+    const digits = String(user?.phone || '').replace(/\D/g, '');
+    return /^998\d{9}$/.test(digits) ? `+${digits}` : '+998';
+}
 
 export default function Cart() {
     const { t } = useT();
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const { items, updateQty, updateNote, clearCart, totalPrice } = useCart();
+    const { user, setUser } = useAuth();
+    const { items, updateQty, updateNote, removeItem, clearCart, syncWithServer, totalPrice, totalItems } = useCart();
 
-    const [deliveryType, setDeliveryType] = useState(
-        localStorage.getItem('efes_delivery_type') || 'delivery'
-    );
+    const [deliveryType, setDeliveryType] = useState(localStorage.getItem('efes_delivery_type') || 'delivery');
     const [paymentMethod, setPaymentMethod] = useState('payme');
 
-    // Address fields
-    const [address, setAddress] = useState(
-        localStorage.getItem('efes_address') || ''
-    );
+    const [address, setAddress] = useState(localStorage.getItem('efes_address') || '');
     const [house, setHouse] = useState('');
     const [entrance, setEntrance] = useState('');
     const [floor, setFloor] = useState('');
@@ -53,81 +53,114 @@ export default function Cart() {
         } catch { return null; }
     });
 
-    // Delivery time
-    const [deliveryDate, setDeliveryDate] = useState(todayStr());
-    const [deliveryTime, setDeliveryTime] = useState(defaultDeliveryTime);
+    // Vaqt: bo'sh = imkon qadar tez
+    const [scheduled, setScheduled] = useState(false);
+    const [deliveryDate, setDeliveryDate] = useState(tashkentNow().date);
+    const [deliveryTime, setDeliveryTime] = useState('');
 
-    // Contact
-    const [extraPhone, setExtraPhone] = useState('+998');
-    const [extraPhoneError, setExtraPhoneError] = useState('');
+    const [phone, setPhone] = useState(() => initialPhone(user));
+    const [phoneError, setPhoneError] = useState('');
 
-    // Branch
     const [branches, setBranches] = useState([]);
     const [selectedBranch, setSelectedBranch] = useState('');
-
-    // Delivery config (admin sozlamalari)
     const [deliveryConfig, setDeliveryConfig] = useState({
-        deliveryCost: 10000,
-        freeDeliveryThreshold: 0,
-        maxBonusPercent: 20,
+        deliveryCost: 10000, freeDeliveryThreshold: 0, maxBonusPercent: 20, minOrderAmount: 0, estimatedDeliveryTime: 30,
     });
+    const [shopStatus, setShopStatus] = useState({ isOpen: true, workHours: '' });
 
-    // Bonus & promo
     const [useBonus, setUseBonus] = useState(false);
     const [promoInput, setPromoInput] = useState('');
     const [promoData, setPromoData] = useState(null);
     const [promoError, setPromoError] = useState('');
     const [promoLoading, setPromoLoading] = useState(false);
 
+    const [notice, setNotice] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const syncedRef = useRef(false);
 
-    // Delivery radius check
+    const openBranches = useMemo(() => branches.filter(b => b.isOpen !== false), [branches]);
+
+    // Yetkazishda — manzilga eng yaqin ochiq filial (server ham shu qoida bilan tanlaydi)
+    const deliveryBranch = useMemo(() => {
+        if (openBranches.length === 0) return null;
+        if (!coords) return openBranches[0];
+        const ranked = openBranches.filter(hasLoc)
+            .map(b => ({ b, dist: haversineKm(coords.lat, coords.lng, b.location.lat, b.location.lng) }))
+            .sort((a, z) => a.dist - z.dist);
+        if (ranked.length === 0) return openBranches[0];
+        return (ranked.find(r => !(r.b.deliveryRadius > 0) || r.dist <= r.b.deliveryRadius) || ranked[0]).b;
+    }, [openBranches, coords]);
+
     const radiusStatus = useMemo(() => {
-        if (deliveryType !== 'delivery' || !coords || branches.length === 0) return null;
-        const branchId = selectedBranch || branches[0]?._id;
-        const b = branches.find(x => x._id === branchId) || branches[0];
-        if (!b || !b.location?.lat || !b.location?.lng || !b.deliveryRadius) return null;
-        const dist = haversineKm(coords.lat, coords.lng, b.location.lat, b.location.lng);
-        return { dist: parseFloat(dist.toFixed(1)), radius: b.deliveryRadius, ok: dist <= b.deliveryRadius };
-    }, [coords, branches, selectedBranch, deliveryType]);
+        if (deliveryType !== 'delivery' || !coords || !deliveryBranch || !hasLoc(deliveryBranch) || !deliveryBranch.deliveryRadius) return null;
+        const dist = haversineKm(coords.lat, coords.lng, deliveryBranch.location.lat, deliveryBranch.location.lng);
+        return { dist: parseFloat(dist.toFixed(1)), radius: deliveryBranch.deliveryRadius, ok: dist <= deliveryBranch.deliveryRadius };
+    }, [coords, deliveryBranch, deliveryType]);
 
-    const totalItems = items.reduce((s, i) => s + i.qty, 0);
+    const minOrder = deliveryType === 'delivery'
+        ? Math.max(deliveryConfig.minOrderAmount || 0, deliveryBranch?.minOrderAmount || 0)
+        : 0;
+    const belowMin = minOrder > 0 && totalPrice < minOrder;
+
     const freeDelivery = deliveryConfig.freeDeliveryThreshold > 0 && totalPrice >= deliveryConfig.freeDeliveryThreshold;
     const deliveryCost = deliveryType === 'delivery' ? (freeDelivery ? 0 : deliveryConfig.deliveryCost) : 0;
-    const maxBonus = Math.floor(totalPrice * (deliveryConfig.maxBonusPercent / 100));
-    const actualBonus = useBonus ? Math.min(user?.bonusPoints || 0, maxBonus) : 0;
     const promoDiscount = promoData?.discountAmount || 0;
-    const grandTotal = totalPrice - actualBonus - promoDiscount + deliveryCost;
+    const maxBonus = Math.max(0, Math.min(Math.floor(totalPrice * ((deliveryConfig.maxBonusPercent || 0) / 100)), totalPrice - promoDiscount));
+    const actualBonus = useBonus ? Math.min(user?.bonusPoints || 0, maxBonus) : 0;
+    const grandTotal = Math.max(0, totalPrice - actualBonus - promoDiscount + deliveryCost);
 
-    const [shopStatus, setShopStatus] = useState({ isOpen: true, workHours: '08:00 — 01:00' });
-
+    // ── Boshlang'ich ma'lumotlar ──
     useEffect(() => {
-        api.get('/branches').then(r => {
-            const active = (r.data || []).filter(b => b.isActive);
-            setBranches(active);
-            if (active.length === 1) setSelectedBranch(active[0]._id);
-        }).catch(() => { });
+        api.get('/branches').then(r => setBranches((r.data || []).filter(b => b.isActive))).catch(() => { });
         api.get('/delivery/config').then(r => {
             setDeliveryConfig(prev => ({ ...prev, ...r.data }));
+            const avail = r.data?.paymentMethods;
+            if (avail?.length) setPaymentMethod(m => avail.includes(m) ? m : avail[0]);
         }).catch(() => { });
-        api.get('/branches/status').then(r => {
-            setShopStatus(r.data || { isOpen: true });
-        }).catch(() => { });
+        api.get('/branches/status').then(r => setShopStatus(r.data || { isOpen: true })).catch(() => { });
+        // Bonus balansi eskirgan bo'lmasligi uchun profilni yangilash
+        api.get('/user/profile').then(r => { if (r.data) setUser(r.data); }).catch(() => { });
     }, []);
 
-    const handlePromoCheck = async () => {
-        if (!promoInput.trim()) return;
+    // Savatni serverdagi narx/holat bilan sinxronlash (bir marta)
+    useEffect(() => {
+        if (syncedRef.current || items.length === 0) return;
+        syncedRef.current = true;
+        refreshCart();
+    }, [items.length]);
+
+    const refreshCart = async () => {
+        try {
+            const ids = items.map(i => i.productId).join(',');
+            const r = await api.get(`/products?ids=${ids}&limit=100`);
+            if (syncWithServer(r.data.products || [])) setNotice(t('cartUpdated'));
+        } catch { /* tarmoq xatosi — server buyurtmada baribir tekshiradi */ }
+    };
+
+    useEffect(() => {
+        if (deliveryType === 'pickup' && !selectedBranch && openBranches.length === 1) setSelectedBranch(openBranches[0]._id);
+    }, [deliveryType, openBranches]);
+
+    // Savat o'zgarsa qo'llangan promo chegirmasi qayta hisoblanadi
+    useEffect(() => {
+        if (promoData) checkPromo(promoData.code || promoInput, true);
+    }, [totalPrice]);
+
+    const checkPromo = async (code, silent = false) => {
+        if (!String(code || '').trim()) return;
         setPromoLoading(true);
-        setPromoError('');
-        setPromoData(null);
+        if (!silent) setPromoError('');
         try {
             const r = await api.post('/promotions/check', {
-                promoCode: promoInput.trim().toUpperCase(),
+                code: code.trim().toUpperCase(),
                 orderAmount: totalPrice,
+                items: items.map(i => ({ productId: i.productId, qty: i.qty })),
             });
             setPromoData(r.data);
+            setPromoError('');
         } catch (err) {
-            setPromoError(err.response?.data?.error || "Promo kod topilmadi");
+            setPromoData(null);
+            setPromoError(err.response?.data?.error || t('promoInvalid'));
         } finally {
             setPromoLoading(false);
         }
@@ -143,37 +176,45 @@ export default function Cart() {
         setShowMap(false);
     };
 
+    const chooseDeliveryType = (k) => {
+        setDeliveryType(k);
+        localStorage.setItem('efes_delivery_type', k);
+    };
+
     const handleOrder = async () => {
-        // Ish vaqti tekshiruvi
         if (shopStatus && shopStatus.isOpen === false) {
-            alert(`Hozir ish vaqti tugagan.\nIsh vaqti: ${shopStatus.workHours}`);
+            alert(t('shopClosed', { hours: shopStatus.workHours }));
             return;
         }
-
-        if (deliveryType === 'delivery' && !address.trim()) {
-            alert(t('addressRequired')); return;
-        }
-        if (deliveryType === 'pickup' && !selectedBranch) {
-            alert(t('branchRequired')); return;
-        }
+        if (deliveryType === 'delivery' && !address.trim()) { alert(t('addressRequired')); setShowMap(true); return; }
+        if (deliveryType === 'pickup' && !selectedBranch) { alert(t('branchRequired')); return; }
         if (radiusStatus && !radiusStatus.ok) {
-            alert(`Manzilingiz yetkazib berish zonasidan tashqarida.\nFilialdan ${radiusStatus.dist} km uzoqda, maksimal radius ${radiusStatus.radius} km.`);
+            alert(t('outOfZone', { dist: radiusStatus.dist, radius: radiusStatus.radius }));
             return;
         }
-
-        // Qo'shimcha telefon validatsiyasi
-        const phoneDigits = extraPhone.replace(/\D/g, '');
-        if (phoneDigits.length < 12) {
-            setExtraPhoneError("To'liq telefon raqam kiriting: +998 XX XXX XX XX");
+        if (belowMin) { alert(t('minOrderHint', { min: fmt(minOrder), left: fmt(minOrder - totalPrice) })); return; }
+        if (!/^\+998\d{9}$/.test(phone)) {
+            setPhoneError(t('phoneInvalid'));
             document.getElementById('extra-phone-input')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
-        setExtraPhoneError('');
+        setPhoneError('');
+        if (scheduled) {
+            const now = tashkentNow();
+            if (!deliveryTime || `${deliveryDate} ${deliveryTime}` < `${now.date} ${now.time}`) {
+                alert(t('timeInPast'));
+                return;
+            }
+        }
 
         setSubmitting(true);
         try {
             const fullAddress = deliveryType === 'delivery'
-                ? [address, house && `Uy: ${house}`, entrance && `Kirish: ${entrance}`, floor && `Qavat: ${floor}`, apartment && `Kv: ${apartment}`].filter(Boolean).join(', ')
+                ? [address,
+                    house && `${t('house')} ${house}`,
+                    entrance && `${t('entrance')}: ${entrance}`,
+                    floor && `${t('floor')}: ${floor}`,
+                    apartment && `${t('apartment')}: ${apartment}`].filter(Boolean).join(', ')
                 : '';
 
             const payload = {
@@ -182,30 +223,34 @@ export default function Cart() {
                 address: fullAddress,
                 addressLat: deliveryType === 'delivery' ? coords?.lat : undefined,
                 addressLng: deliveryType === 'delivery' ? coords?.lng : undefined,
-                branch: selectedBranch || branches[0]?._id,
+                branch: deliveryType === 'pickup' ? selectedBranch : deliveryBranch?._id,
                 paymentMethod,
-                phone: user?.phone || '',
-                extraPhone,
+                extraPhone: phone,
                 bonusDiscount: actualBonus,
-                promoCode: promoInput.trim().toUpperCase() || undefined,
-                notes: comment,
-                deliveryDate: deliveryDate || undefined,
-                deliveryTime: deliveryTime || undefined,
+                promoCode: promoData ? (promoData.code || promoInput.trim().toUpperCase()) : undefined,
+                notes: comment.trim(),
+                deliveryDate: scheduled ? deliveryDate : undefined,
+                deliveryTime: scheduled ? deliveryTime : undefined,
             };
             const r = await api.post('/orders', payload);
             clearCart();
 
-            const orderNum = r.data.orderNumber || r.data._id?.slice(-6).toUpperCase();
-            const payUrl = encodeURIComponent(r.data.paymentUrl || '');
-            if (paymentMethod === 'payme') {
-                navigate(`/payment?orderId=${r.data._id}&method=payme&total=${grandTotal}&orderNum=${orderNum}&payUrl=${payUrl}`);
-            } else if (paymentMethod === 'click') {
-                navigate(`/payment?orderId=${r.data._id}&method=click&total=${grandTotal}&orderNum=${orderNum}&payUrl=${payUrl}`);
-            } else {
-                navigate(`/payment?orderId=${r.data._id}&method=cash&orderNum=${orderNum}`);
-            }
+            const q = new URLSearchParams({
+                orderId: r.data._id,
+                method: r.data.paymentMethod,
+                total: String(r.data.total),
+                orderNum: r.data.orderNumber,
+                eta: String(r.data.estimatedTime || deliveryConfig.estimatedDeliveryTime || 30),
+                type: deliveryType,
+            });
+            if (scheduled) q.set('when', `${deliveryDate} ${deliveryTime}`);
+            if (r.data.paymentUrl) q.set('payUrl', r.data.paymentUrl);
+            navigate(`/payment?${q}`, { replace: true });
         } catch (err) {
-            alert(t('errorOccurred') + ': ' + (err.response?.data?.error || err.message));
+            const data = err.response?.data || {};
+            if (data.code === 'PRODUCTS_UNAVAILABLE') await refreshCart();
+            if (data.code === 'PROMO_INVALID') { setPromoData(null); setPromoError(data.error); }
+            alert(data.error || t('serverConnectError'));
         } finally {
             setSubmitting(false);
         }
@@ -215,8 +260,9 @@ export default function Cart() {
         return (
             <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 90 }}>
                 <div style={{ padding: '16px 16px 0' }}>
-                    <div style={{ fontWeight: 800, fontSize: 20 }}>🛒 Savat</div>
+                    <div style={{ fontWeight: 800, fontSize: 20 }}>🛒 {t('cartTitle')}</div>
                 </div>
+                {notice && <Notice text={notice} onClose={() => setNotice('')} />}
                 <div style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'center', padding: '80px 20px', textAlign: 'center',
@@ -228,17 +274,18 @@ export default function Cart() {
                     }}>🛒</div>
                     <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>{t('cartEmpty')}</div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 28 }}>{t('cartEmptyText')}</div>
-                    <button onClick={() => navigate('/menu')} style={{
-                        padding: '14px 32px',
-                        background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
-                        border: 'none', borderRadius: 14, color: '#1a1a24',
-                        fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                    }}>🍽 {t('goToMenu')}</button>
+                    <button onClick={() => navigate('/menu')} style={goldBtn}>🍽 {t('goToMenu')}</button>
                 </div>
                 <BottomNav />
             </div>
         );
     }
+
+    const PAY_METHODS = [
+        { key: 'payme', label: 'Payme' },
+        { key: 'click', label: 'Click' },
+        { key: 'cash', label: t('cashLabel') },
+    ].filter(m => !deliveryConfig.paymentMethods || deliveryConfig.paymentMethods.includes(m.key));
 
     return (
         <>
@@ -250,24 +297,16 @@ export default function Cart() {
                 />
             )}
 
-            <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 140 }}>
+            <div style={{ background: 'var(--bg)', minHeight: '100vh', paddingBottom: 160 }}>
                 {shopStatus && shopStatus.isOpen === false && (
-                    <div style={{
-                        margin: '12px 16px 0',
-                        background: 'rgba(231,76,60,0.1)',
-                        border: '1px solid rgba(231,76,60,0.3)',
-                        borderRadius: 12,
-                        padding: '12px 14px',
-                        color: '#e74c3c',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        textAlign: 'center',
-                    }}>
-                        🌙 Hozir yopiq. Ish vaqti: <b>{shopStatus.workHours || '08:00 — 01:00'}</b>
+                    <div style={{ ...banner, background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.3)', color: '#e74c3c', textAlign: 'center' }}>
+                        🌙 {t('shopClosed', { hours: shopStatus.workHours })}
                     </div>
                 )}
+                {notice && <Notice text={notice} onClose={() => setNotice('')} />}
+
                 <div style={{ padding: '16px 16px 8px' }}>
-                    <div style={{ fontWeight: 800, fontSize: 20 }}>🛒 Savat</div>
+                    <div style={{ fontWeight: 800, fontSize: 20 }}>🛒 {t('cartTitle')}</div>
                 </div>
 
                 {/* ── Items ── */}
@@ -277,56 +316,44 @@ export default function Cart() {
                             background: 'var(--bg-card)', border: '1px solid var(--border)',
                             borderRadius: 16, padding: 14, marginBottom: 10,
                         }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                                <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 10 }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{item.name}</div>
-                                    <div style={{
-                                        fontSize: 14, fontWeight: 700,
-                                        background: 'linear-gradient(135deg, #F0C040, #D4A017)',
-                                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                                    }}>{(item.price * item.qty).toLocaleString()} so'm</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{fmt(item.price)} {t('sum')}</div>
+                                    <div style={goldText}>{fmt(item.price * item.qty)} {t('sum')}</div>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <QtyBtn onClick={() => updateQty(item.productId, item.qty - 1)}>−</QtyBtn>
+                                    <QtyBtn onClick={() => updateQty(item.productId, item.qty - 1)} label="−">{item.qty === 1 ? '🗑' : '−'}</QtyBtn>
                                     <span style={{ fontWeight: 800, fontSize: 15, minWidth: 22, textAlign: 'center' }}>{item.qty}</span>
-                                    <QtyBtn primary onClick={() => updateQty(item.productId, item.qty + 1)}>+</QtyBtn>
+                                    <QtyBtn primary disabled={item.qty >= MAX_QTY} onClick={() => updateQty(item.productId, item.qty + 1)} label="+">+</QtyBtn>
                                 </div>
                             </div>
                             <input
                                 value={item.note || ''}
                                 onChange={e => updateNote(item.productId, e.target.value)}
                                 placeholder={t('itemNotePlaceholder')}
+                                maxLength={200}
                                 style={IS}
-                                onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                                onBlur={e => e.target.style.borderColor = 'var(--border)'}
                             />
                         </div>
                     ))}
                 </div>
 
                 {/* ── Delivery Type ── */}
-                <Section title="🚗 Yetkazib berish usuli">
+                <Section title={`🚗 ${t('deliveryMethod')}`}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                         {[
-                            { k: 'delivery', label: '🚗 Yetkazib berish' },
-                            { k: 'pickup', label: '🏃 Olib ketish' },
+                            { k: 'delivery', label: `🚗 ${t('delivery')}` },
+                            { k: 'pickup', label: `🏃 ${t('pickup')}` },
                         ].map(dt => (
-                            <button key={dt.k} onClick={() => setDeliveryType(dt.k)} style={{
-                                padding: '13px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
-                                background: deliveryType === dt.k
-                                    ? 'linear-gradient(135deg, var(--primary), var(--primary-light))'
-                                    : 'var(--bg-card)',
-                                border: `1px solid ${deliveryType === dt.k ? 'transparent' : 'var(--border)'}`,
-                                color: deliveryType === dt.k ? '#1a1a24' : 'var(--text)',
-                                fontWeight: 700, fontSize: 13, transition: 'all 0.25s',
-                            }}>{dt.label}</button>
+                            <button key={dt.k} onClick={() => chooseDeliveryType(dt.k)} style={toggleBtn(deliveryType === dt.k)}>{dt.label}</button>
                         ))}
                     </div>
                 </Section>
 
                 {/* ── Address / Branch ── */}
                 {deliveryType === 'delivery' ? (
-                    <Section title="📍 Manzil">
+                    <Section title={`📍 ${t('addressSection')}`}>
                         <button onClick={() => setShowMap(true)} style={{
                             width: '100%', padding: '13px 16px',
                             background: address ? 'var(--bg-card)' : 'var(--bg-secondary)',
@@ -335,162 +362,134 @@ export default function Cart() {
                             fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
                             textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10,
                             marginBottom: 10, fontWeight: address ? 600 : 400,
-                            boxShadow: address ? '0 0 0 3px rgba(212,160,23,0.1)' : 'none',
                         }}>
                             <span style={{ fontSize: 18 }}>📍</span>
                             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {address || 'Xaritadan tanlang'}
+                                {address || t('chooseOnMap')}
                             </span>
                             <span style={{ color: 'var(--primary)', fontSize: 12, fontWeight: 700 }}>
-                                {address ? 'O\'zgartirish' : 'Tanlash'}
+                                {address ? t('change') : t('choose')}
                             </span>
                         </button>
 
-                        {/* Radius warning */}
-                        {radiusStatus && !radiusStatus.ok && (
+                        {radiusStatus && (
                             <div style={{
-                                padding: '10px 14px', borderRadius: 12, marginBottom: 10,
-                                background: 'rgba(231,76,60,0.08)', border: '1px solid rgba(231,76,60,0.25)',
-                                color: '#e74c3c', fontSize: 13, fontWeight: 600,
-                                display: 'flex', alignItems: 'center', gap: 8,
+                                ...hint,
+                                background: radiusStatus.ok ? 'rgba(39,174,96,0.08)' : 'rgba(231,76,60,0.08)',
+                                border: `1px solid ${radiusStatus.ok ? 'rgba(39,174,96,0.2)' : 'rgba(231,76,60,0.25)'}`,
+                                color: radiusStatus.ok ? '#27ae60' : '#e74c3c',
                             }}>
-                                <span>⚠️</span>
-                                <span>
-                                    Manzil yetkazib berish zonasidan tashqarida ({radiusStatus.dist} km / {radiusStatus.radius} km radius)
-                                </span>
-                            </div>
-                        )}
-                        {radiusStatus && radiusStatus.ok && (
-                            <div style={{
-                                padding: '8px 14px', borderRadius: 12, marginBottom: 10,
-                                background: 'rgba(39,174,96,0.08)', border: '1px solid rgba(39,174,96,0.2)',
-                                color: '#27ae60', fontSize: 13, fontWeight: 600,
-                                display: 'flex', alignItems: 'center', gap: 8,
-                            }}>
-                                <span>✅</span>
-                                <span>Yetkazib berish zonasida ({radiusStatus.dist} km)</span>
+                                <span>{radiusStatus.ok ? '✅' : '⚠️'}</span>
+                                <span>{radiusStatus.ok
+                                    ? t('inZone', { dist: radiusStatus.dist })
+                                    : t('outOfZone', { dist: radiusStatus.dist, radius: radiusStatus.radius })}</span>
                             </div>
                         )}
 
-                        {/* Address details */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                            <MiniInput value={house} onChange={setHouse} placeholder="Uy №" />
-                            <MiniInput value={entrance} onChange={setEntrance} placeholder="Kirish" />
-                            <MiniInput value={floor} onChange={setFloor} placeholder="Qavat" />
-                            <MiniInput value={apartment} onChange={setApartment} placeholder="Kvartira" />
+                            <MiniInput value={house} onChange={setHouse} placeholder={t('house')} />
+                            <MiniInput value={entrance} onChange={setEntrance} placeholder={t('entrance')} />
+                            <MiniInput value={floor} onChange={setFloor} placeholder={t('floor')} />
+                            <MiniInput value={apartment} onChange={setApartment} placeholder={t('apartment')} />
                         </div>
-                        <input
-                            value={comment}
-                            onChange={e => setComment(e.target.value)}
-                            placeholder="Mo'ljal (ixtiyoriy)"
-                            style={IS}
-                            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                        />
+                        <input value={comment} onChange={e => setComment(e.target.value)} placeholder={t('landmark')} maxLength={300} style={IS} />
                     </Section>
                 ) : (
-                    <Section title="🏢 Filialni tanlang">
+                    <Section title={`🏢 ${t('chooseBranch')}`}>
                         {branches.length === 0 ? (
                             <div style={{
                                 padding: '16px 14px', background: 'var(--bg-card)',
                                 border: '1px dashed var(--border)', borderRadius: 14,
                                 color: 'var(--text-secondary)', fontSize: 13, textAlign: 'center',
-                            }}>
-                                Hozircha faol filial yo'q. Iltimos, yetkazib berishni tanlang.
-                            </div>
+                            }}>{t('noActiveBranch')}</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {branches.map(b => (
-                                    <label key={b._id} style={{
-                                        display: 'flex', alignItems: 'center', gap: 12,
-                                        padding: '13px 16px', background: 'var(--bg-card)',
-                                        border: `1.5px solid ${selectedBranch === b._id ? 'var(--primary)' : 'var(--border)'}`,
-                                        borderRadius: 14, cursor: 'pointer',
-                                        boxShadow: selectedBranch === b._id ? '0 0 0 3px rgba(212,160,23,0.08)' : 'none',
-                                    }}>
-                                        <input type="radio" name="branch" value={b._id}
-                                            checked={selectedBranch === b._id}
-                                            onChange={() => setSelectedBranch(b._id)}
-                                            style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
-                                        />
-                                        <div>
-                                            <div style={{ fontWeight: 700, fontSize: 14 }}>{b.name || `Filial #${b.number}`}</div>
-                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{b.address}</div>
-                                        </div>
-                                    </label>
-                                ))}
+                                {branches.map(b => {
+                                    const closed = b.isOpen === false;
+                                    return (
+                                        <label key={b._id} style={{
+                                            display: 'flex', alignItems: 'center', gap: 12,
+                                            padding: '13px 16px', background: 'var(--bg-card)',
+                                            border: `1.5px solid ${selectedBranch === b._id ? 'var(--primary)' : 'var(--border)'}`,
+                                            borderRadius: 14, cursor: closed ? 'not-allowed' : 'pointer', opacity: closed ? 0.5 : 1,
+                                        }}>
+                                            <input type="radio" name="branch" value={b._id} disabled={closed}
+                                                checked={selectedBranch === b._id}
+                                                onChange={() => setSelectedBranch(b._id)}
+                                                style={{ accentColor: 'var(--primary)', width: 18, height: 18 }}
+                                            />
+                                            <div>
+                                                <div style={{ fontWeight: 700, fontSize: 14 }}>{b.name || `#${b.number}`}</div>
+                                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                                                    {closed ? `🔒 ${t('branchClosedNow')}` : [b.address, b.hours].filter(Boolean).join(' · ')}
+                                                </div>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
                             </div>
+                        )}
+                        {deliveryType === 'pickup' && (
+                            <input value={comment} onChange={e => setComment(e.target.value)} placeholder={t('landmark')} maxLength={300} style={{ ...IS, marginTop: 10 }} />
                         )}
                     </Section>
                 )}
 
-                {/* ── Delivery Time ── */}
-                <Section title="🕐 Yetkazib berish vaqti">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <div>
-                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, fontWeight: 600 }}>Sana</div>
-                            <input
-                                type="date"
-                                value={deliveryDate}
-                                min={todayStr()}
-                                onChange={e => setDeliveryDate(e.target.value)}
-                                style={{ ...IS, marginBottom: 0, colorScheme: 'dark', fontSize: 13 }}
-                            />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, fontWeight: 600 }}>Vaqt (ixtiyoriy)</div>
-                            <input
-                                type="time"
-                                value={deliveryTime}
-                                onChange={e => setDeliveryTime(e.target.value)}
-                                style={{ ...IS, marginBottom: 0, colorScheme: 'dark', fontSize: 13 }}
-                            />
-                        </div>
+                {/* ── Time ── */}
+                <Section title={`🕐 ${deliveryType === 'pickup' ? t('timeSectionPickup') : t('timeSection')}`}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: scheduled ? 10 : 0 }}>
+                        <button onClick={() => setScheduled(false)} style={toggleBtn(!scheduled)}>
+                            ⚡ {t('asap')}
+                            <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.8, marginTop: 2 }}>
+                                {t('asapHint', { min: deliveryConfig.estimatedDeliveryTime || 30 })}
+                            </div>
+                        </button>
+                        <button onClick={() => setScheduled(true)} style={toggleBtn(scheduled)}>📅 {t('scheduled')}</button>
                     </div>
+                    {scheduled && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                            <div>
+                                <div style={label}>{t('date')}</div>
+                                <input type="date" value={deliveryDate} min={tashkentNow().date}
+                                    onChange={e => setDeliveryDate(e.target.value)} style={{ ...IS, fontSize: 13 }} />
+                            </div>
+                            <div>
+                                <div style={label}>{t('time')}</div>
+                                <input type="time" value={deliveryTime} onChange={e => setDeliveryTime(e.target.value)} style={{ ...IS, fontSize: 13 }} />
+                            </div>
+                        </div>
+                    )}
                 </Section>
 
-                {/* ── Extra phone ── */}
-                <Section title="📞 Telefon raqam *">
+                {/* ── Phone ── */}
+                <Section title={`📞 ${t('phoneSection')} *`}>
                     <input
                         id="extra-phone-input"
-                        value={extraPhone}
+                        value={phone}
                         onChange={e => {
-                            let v = e.target.value;
-                            if (!v.startsWith('+998')) v = '+998';
-                            const digits = v.replace(/\D/g, '');
-                            if (digits.length <= 12) setExtraPhone('+' + digits);
-                            if (extraPhoneError) setExtraPhoneError('');
+                            let digits = e.target.value.replace(/\D/g, '');
+                            if (!digits.startsWith('998')) digits = '998' + digits.replace(/^9?9?8?/, '');
+                            setPhone('+' + digits.slice(0, 12));
+                            if (phoneError) setPhoneError('');
                         }}
                         placeholder="+998 90 123 45 67"
                         type="tel"
-                        style={{
-                            ...IS,
-                            border: `1.5px solid ${extraPhoneError ? '#e74c3c' : 'var(--border)'}`,
-                        }}
-                        onFocus={e => e.target.style.borderColor = extraPhoneError ? '#e74c3c' : 'var(--primary)'}
-                        onBlur={e => e.target.style.borderColor = extraPhoneError ? '#e74c3c' : 'var(--border)'}
+                        inputMode="tel"
+                        style={{ ...IS, border: `1.5px solid ${phoneError ? '#e74c3c' : 'var(--border)'}` }}
                     />
-                    {extraPhoneError && (
-                        <div style={{ color: '#e74c3c', fontSize: 12, marginTop: 6 }}>
-                            {extraPhoneError}
-                        </div>
-                    )}
-                    <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 6 }}>
-                        Yetkazib beruvchi siz bilan bog'lanadi
-                    </div>
+                    {phoneError && <div style={{ color: '#e74c3c', fontSize: 12, marginTop: 6 }}>{phoneError}</div>}
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 6 }}>{t('courierWillCall')}</div>
                 </Section>
 
                 {/* ── Payment ── */}
-                <Section title="💳 To'lov turi">
+                <Section title={`💳 ${t('paymentSection')}`}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {PAY_METHODS.map(m => (
                             <label key={m.key} style={{
                                 display: 'flex', alignItems: 'center', gap: 12,
                                 padding: '13px 16px', background: 'var(--bg-card)',
                                 border: `1.5px solid ${paymentMethod === m.key ? 'var(--primary)' : 'var(--border)'}`,
-                                borderRadius: 14, cursor: 'pointer',
-                                boxShadow: paymentMethod === m.key ? '0 0 0 3px rgba(212,160,23,0.08)' : 'none',
-                                transition: 'all 0.25s',
+                                borderRadius: 14, cursor: 'pointer', transition: 'all 0.25s',
                             }}>
                                 <input type="radio" name="pay" value={m.key}
                                     checked={paymentMethod === m.key}
@@ -505,7 +504,7 @@ export default function Cart() {
                 </Section>
 
                 {/* ── Promo code ── */}
-                <Section title="🎟 Promo kod">
+                <Section title={`🎟 ${t('promoSection')}`}>
                     {promoData ? (
                         <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -513,12 +512,12 @@ export default function Cart() {
                             border: '1.5px solid rgba(46,204,113,0.3)', borderRadius: 14,
                         }}>
                             <div>
-                                <div style={{ fontWeight: 700, fontSize: 14, color: '#2ecc71' }}>✅ {promoData.title || promoInput}</div>
+                                <div style={{ fontWeight: 700, fontSize: 14, color: '#2ecc71' }}>✅ {promoData.code || promoInput}</div>
                                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                                    −{promoData.discountAmount.toLocaleString()} so'm chegirma
+                                    {t('promoDiscountMsg', { amount: fmt(promoData.discountAmount) })}
                                 </div>
                             </div>
-                            <button onClick={() => { setPromoData(null); setPromoInput(''); }} style={{
+                            <button aria-label={t('promoRemove')} onClick={() => { setPromoData(null); setPromoInput(''); }} style={{
                                 background: 'none', border: 'none', color: '#e74c3c',
                                 fontSize: 18, cursor: 'pointer', padding: '4px 8px',
                             }}>✕</button>
@@ -527,32 +526,29 @@ export default function Cart() {
                         <div style={{ display: 'flex', gap: 8 }}>
                             <input
                                 value={promoInput}
-                                onChange={e => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
-                                placeholder="Masalan: EFES10"
-                                style={{ ...IS, marginBottom: 0, flex: 1, textTransform: 'uppercase' }}
-                                onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                                onBlur={e => e.target.style.borderColor = promoError ? '#e74c3c' : 'var(--border)'}
-                                onKeyDown={e => e.key === 'Enter' && handlePromoCheck()}
+                                onChange={e => { setPromoInput(e.target.value.toUpperCase().replace(/\s/g, '')); setPromoError(''); }}
+                                placeholder={t('promoExample')}
+                                maxLength={30}
+                                style={{ ...IS, flex: 1, textTransform: 'uppercase' }}
+                                onKeyDown={e => e.key === 'Enter' && checkPromo(promoInput)}
                             />
-                            <button onClick={handlePromoCheck} disabled={promoLoading || !promoInput.trim()} style={{
+                            <button onClick={() => checkPromo(promoInput)} disabled={promoLoading || !promoInput.trim()} style={{
                                 padding: '0 18px', flexShrink: 0,
                                 background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
                                 border: 'none', borderRadius: 14, color: '#1a1a24',
                                 fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                                 opacity: (!promoInput.trim() || promoLoading) ? 0.5 : 1,
                             }}>
-                                {promoLoading ? '...' : "Qo'llash"}
+                                {promoLoading ? '...' : t('apply')}
                             </button>
                         </div>
                     )}
-                    {promoError && (
-                        <div style={{ fontSize: 12, color: '#e74c3c', marginTop: 6 }}>⚠ {promoError}</div>
-                    )}
+                    {promoError && <div style={{ fontSize: 12, color: '#e74c3c', marginTop: 6 }}>⚠ {promoError}</div>}
                 </Section>
 
                 {/* ── Bonus ── */}
-                {(user?.bonusPoints || 0) > 0 && (
-                    <Section title="🎁 Bonus">
+                {(user?.bonusPoints || 0) > 0 && maxBonus > 0 && (
+                    <Section title={`🎁 ${t('bonusSection')}`}>
                         <label style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             padding: '14px 16px', background: 'var(--bg-card)',
@@ -562,8 +558,8 @@ export default function Cart() {
                             <div>
                                 <div style={{ fontWeight: 600, fontSize: 14 }}>{t('useBonus')}</div>
                                 <div style={{ fontSize: 12, color: 'var(--primary-light)', marginTop: 2 }}>
-                                    {user.bonusPoints} {t('bonusAvailable')}
-                                    {useBonus && actualBonus > 0 && ` → −${actualBonus.toLocaleString()} so'm`}
+                                    {fmt(user.bonusPoints)} {t('bonusAvailable')}
+                                    {useBonus && actualBonus > 0 && ` → −${fmt(actualBonus)} ${t('sum')}`}
                                 </div>
                             </div>
                             <input type="checkbox" checked={useBonus}
@@ -579,45 +575,51 @@ export default function Cart() {
                     margin: '0 16px 16px', background: 'var(--bg-card)',
                     border: '1px solid var(--border)', borderRadius: 18, padding: 18,
                 }}>
-                    <SRow label={`Mahsulotlar (${totalItems} ta)`} value={`${totalPrice.toLocaleString()} so'm`} />
-                    <SRow label="Yetkazib berish" value={deliveryCost === 0 ? 'Bepul' : `${deliveryCost.toLocaleString()} so'm`} />
-                    {actualBonus > 0 && <SRow label="Bonus chegirma" value={`−${actualBonus.toLocaleString()} so'm`} color="#2ecc71" />}
-                    {promoDiscount > 0 && <SRow label="Promo chegirma" value={`−${promoDiscount.toLocaleString()} so'm`} color="#2ecc71" />}
+                    <SRow label={t('itemsCount', { n: totalItems })} value={`${fmt(totalPrice)} ${t('sum')}`} />
+                    {deliveryType === 'delivery' && (
+                        <SRow label={t('deliveryFee')} value={deliveryCost === 0 ? t('freeLabel') : `${fmt(deliveryCost)} ${t('sum')}`} color={deliveryCost === 0 ? '#2ecc71' : undefined} />
+                    )}
+                    {actualBonus > 0 && <SRow label={t('bonusDiscountRow')} value={`−${fmt(actualBonus)} ${t('sum')}`} color="#2ecc71" />}
+                    {promoDiscount > 0 && <SRow label={t('promoDiscountRow')} value={`−${fmt(promoDiscount)} ${t('sum')}`} color="#2ecc71" />}
+                    {deliveryType === 'delivery' && !freeDelivery && deliveryConfig.freeDeliveryThreshold > totalPrice && (
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                            🚚 {t('freeDeliveryHint', { left: fmt(deliveryConfig.freeDeliveryThreshold - totalPrice) })}
+                        </div>
+                    )}
                     <div style={{
                         borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12,
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
-                        <span style={{ fontWeight: 800, fontSize: 16 }}>Jami</span>
-                        <span style={{
-                            fontWeight: 900, fontSize: 22,
-                            background: 'linear-gradient(135deg, #F0C040, #D4A017)',
-                            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                        }}>{grandTotal.toLocaleString()} so'm</span>
+                        <span style={{ fontWeight: 800, fontSize: 16 }}>{t('totalLabel')}</span>
+                        <span style={{ ...goldText, fontWeight: 900, fontSize: 22 }}>{fmt(grandTotal)} {t('sum')}</span>
                     </div>
                 </div>
 
-                {/* ── Order Button — BottomNav ustida joylashtirilgan ── */}
+                {/* ── Order Button — BottomNav ustida ── */}
                 <div style={{
                     position: 'fixed', bottom: 72, left: 0, right: 0,
-                    background: 'rgba(13,13,20,0.95)', borderTop: '1px solid var(--border)',
-                    padding: '12px 16px 12px', backdropFilter: 'blur(20px)',
-                    zIndex: 110,
+                    background: 'var(--bg)', borderTop: '1px solid var(--border)',
+                    padding: '10px 16px 12px', zIndex: 110,
                 }}>
+                    {belowMin && (
+                        <div style={{ fontSize: 12, color: '#e67e22', textAlign: 'center', marginBottom: 8, fontWeight: 600 }}>
+                            {t('minOrderHint', { min: fmt(minOrder), left: fmt(minOrder - totalPrice) })}
+                        </div>
+                    )}
                     <button
                         onClick={handleOrder}
-                        disabled={submitting}
+                        disabled={submitting || belowMin}
                         style={{
                             width: '100%', maxWidth: 480, margin: '0 auto', display: 'block',
                             padding: '16px',
-                            background: submitting ? '#444' : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                            background: (submitting || belowMin) ? '#555' : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
                             border: 'none', borderRadius: 16,
-                            color: submitting ? '#999' : '#1a1a24',
-                            fontSize: 16, fontWeight: 800, cursor: submitting ? 'default' : 'pointer',
+                            color: (submitting || belowMin) ? '#bbb' : '#1a1a24',
+                            fontSize: 16, fontWeight: 800, cursor: (submitting || belowMin) ? 'default' : 'pointer',
                             fontFamily: 'inherit',
-                            boxShadow: submitting ? 'none' : '0 4px 20px rgba(212,160,23,0.35)',
                         }}
                     >
-                        {submitting ? `⏳ ${t('ordering')}` : `🍽 Buyurtma berish • ${grandTotal.toLocaleString()} so'm`}
+                        {submitting ? `⏳ ${t('ordering')}` : `🍽 ${t('orderBtn', { amount: fmt(grandTotal) })}`}
                     </button>
                 </div>
 
@@ -627,14 +629,13 @@ export default function Cart() {
     );
 }
 
-function todayStr() {
-    return new Date().toISOString().split('T')[0];
-}
-
-function defaultDeliveryTime() {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() + 30);
-    return d.toTimeString().slice(0, 5);
+function Notice({ text, onClose }) {
+    return (
+        <div style={{ ...banner, background: 'rgba(230,126,34,0.1)', border: '1px solid rgba(230,126,34,0.3)', color: '#e67e22', display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{ flex: 1 }}>ℹ️ {text}</span>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'inherit', fontSize: 16, cursor: 'pointer' }}>✕</button>
+        </div>
+    );
 }
 
 function Section({ title, children }) {
@@ -646,25 +647,23 @@ function Section({ title, children }) {
     );
 }
 
-function SRow({ label, value, color }) {
+function SRow({ label: l, value, color }) {
     return (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8 }}>
-            <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{l}</span>
             <span style={{ fontWeight: 600, color: color || 'var(--text)' }}>{value}</span>
         </div>
     );
 }
 
-function QtyBtn({ onClick, primary, children }) {
+function QtyBtn({ onClick, primary, disabled, label: aria, children }) {
     return (
-        <button onClick={onClick} style={{
-            width: 32, height: 32, borderRadius: 10,
-            background: primary
-                ? 'linear-gradient(135deg, var(--primary), var(--primary-light))'
-                : 'var(--bg-secondary)',
+        <button onClick={onClick} disabled={disabled} aria-label={aria} style={{
+            width: 34, height: 34, borderRadius: 10,
+            background: primary ? 'linear-gradient(135deg, var(--primary), var(--primary-light))' : 'var(--bg-secondary)',
             border: primary ? 'none' : '1px solid var(--border)',
             color: primary ? '#1a1a24' : 'var(--text)',
-            fontSize: 16, cursor: 'pointer', fontWeight: 700,
+            fontSize: 15, cursor: disabled ? 'default' : 'pointer', fontWeight: 700, opacity: disabled ? 0.4 : 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{children}</button>
     );
@@ -672,19 +671,8 @@ function QtyBtn({ onClick, primary, children }) {
 
 function MiniInput({ value, onChange, placeholder }) {
     return (
-        <input
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={placeholder}
-            style={{
-                width: '100%', padding: '11px 12px',
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: 12, color: 'var(--text)', fontSize: 13,
-                outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.2s',
-            }}
-            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-        />
+        <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} maxLength={30}
+            style={{ ...IS, padding: '11px 12px', fontSize: 13, borderRadius: 12 }} />
     );
 }
 
@@ -692,7 +680,26 @@ const IS = {
     width: '100%', padding: '12px 14px', marginBottom: 0,
     background: 'var(--bg-card)', border: '1px solid var(--border)',
     borderRadius: 13, color: 'var(--text)', fontSize: 14,
-    outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.25s',
-    display: 'block',
+    outline: 'none', fontFamily: 'inherit', display: 'block', boxSizing: 'border-box',
 };
-
+const label = { fontSize: 11, color: 'var(--text-secondary)', marginBottom: 5, fontWeight: 600 };
+const banner = { margin: '12px 16px 0', borderRadius: 12, padding: '12px 14px', fontSize: 13, fontWeight: 600 };
+const hint = { padding: '10px 14px', borderRadius: 12, marginBottom: 10, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 };
+const goldText = {
+    fontSize: 14, fontWeight: 700,
+    background: 'linear-gradient(135deg, #F0C040, #D4A017)',
+    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+};
+const goldBtn = {
+    padding: '14px 32px',
+    background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+    border: 'none', borderRadius: 14, color: '#1a1a24',
+    fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+};
+const toggleBtn = (active) => ({
+    padding: '13px', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+    background: active ? 'linear-gradient(135deg, var(--primary), var(--primary-light))' : 'var(--bg-card)',
+    border: `1px solid ${active ? 'transparent' : 'var(--border)'}`,
+    color: active ? '#1a1a24' : 'var(--text)',
+    fontWeight: 700, fontSize: 13, transition: 'all 0.25s',
+});

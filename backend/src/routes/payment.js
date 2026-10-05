@@ -6,6 +6,8 @@ const PaymeService = require('../services/payme.service');
 const Order = require('../models/Order');
 const { authTelegram } = require('../middleware/auth');
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 // ─── Click API helper (server-side status check) ───
 function clickApiGet(path) {
     return new Promise((resolve) => {
@@ -38,14 +40,14 @@ router.get('/click/prepare', (req, res) => res.json({ error: 0, error_note: 'OK'
 router.get('/click/complete', (req, res) => res.json({ error: 0, error_note: 'OK' }));
 
 router.post('/click/prepare', async (req, res) => {
-    console.log('[CLICK PREPARE RAW] headers:', JSON.stringify(req.headers['content-type']), 'body:', JSON.stringify(req.body), 'query:', JSON.stringify(req.query));
+    if (isDev) console.log('[CLICK PREPARE RAW] body:', JSON.stringify(req.body), 'query:', JSON.stringify(req.query));
     const body = Object.keys(req.body).length ? req.body : req.query;
     const result = await ClickService.prepare(body);
     res.json(result);
 });
 
 router.post('/click/complete', async (req, res) => {
-    console.log('[CLICK COMPLETE RAW] headers:', JSON.stringify(req.headers['content-type']), 'body:', JSON.stringify(req.body), 'query:', JSON.stringify(req.query));
+    if (isDev) console.log('[CLICK COMPLETE RAW] body:', JSON.stringify(req.body), 'query:', JSON.stringify(req.query));
     const body = Object.keys(req.body).length ? req.body : req.query;
     const result = await ClickService.complete(body);
     res.json(result);
@@ -75,7 +77,7 @@ router.get('/click/check/:orderId', authTelegram, async (req, res) => {
         // click_trans_id orqali
         if (order.paymentId && process.env.CLICK_MERCHANT_USER_ID) {
             const byTransId = await clickApiGet(`/v2/merchant/payment/status/${serviceId}/${order.paymentId}`);
-            console.log('[CLICK CHECK] by trans_id →', JSON.stringify(byTransId));
+            if (isDev) console.log('[CLICK CHECK] by trans_id →', JSON.stringify(byTransId));
             if (byTransId?.error_code === 0 && byTransId.payment_status === 2) {
                 await ClickService.confirmPayment(order);
                 return res.json({ paid: true, source: 'click_api' });
@@ -85,7 +87,7 @@ router.get('/click/check/:orderId', authTelegram, async (req, res) => {
         // orderNumber orqali
         if (process.env.CLICK_MERCHANT_USER_ID) {
             const byOrderNum = await clickApiGet(`/v2/merchant/payment/status/${serviceId}/${encodeURIComponent(order.orderNumber)}`);
-            console.log('[CLICK CHECK] by orderNumber →', JSON.stringify(byOrderNum));
+            if (isDev) console.log('[CLICK CHECK] by orderNumber →', JSON.stringify(byOrderNum));
             if (byOrderNum?.error_code === 0 && byOrderNum.payment_status === 2) {
                 await ClickService.confirmPayment(order);
                 return res.json({ paid: true, source: 'click_api' });

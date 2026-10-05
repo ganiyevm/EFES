@@ -53,20 +53,21 @@ export default function DeliverySettings() {
                         </div>
                         <div className="form-group">
                             <label className="form-label">Taxminiy yetkazish vaqti (daq)</label>
-                            <input className="form-input" type="number" value={settings.estimatedDeliveryTime || 30} onChange={e => setField('estimatedDeliveryTime', parseInt(e.target.value) || 30)} />
+                            <input className="form-input" type="number" value={settings.estimatedDeliveryTime ?? 30} min="5" onChange={e => setField('estimatedDeliveryTime', parseInt(e.target.value) || 30)} />
                         </div>
                         <div className="form-group" style={{ gridColumn: 'span 2' }}>
                             <label className="form-label">Ish vaqti</label>
-                            <input className="form-input" value={settings.workHours || '10:00 — 23:00'} onChange={e => setField('workHours', e.target.value)} placeholder="10:00 — 23:00" />
+                            <input className="form-input" value={settings.workHours || ''} onChange={e => setField('workHours', e.target.value)} placeholder="08:00 — 01:00" />
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Buyurtma faqat shu vaqtda qabul qilinadi. Tunda tugasa ham bo'ladi: 08:00 — 01:00</div>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Bonus foizi (%)</label>
-                            <input className="form-input" type="number" value={settings.bonusPercent || 5} onChange={e => setField('bonusPercent', parseInt(e.target.value) || 5)} />
+                            <input className="form-input" type="number" value={settings.bonusPercent ?? 1} step="0.5" min="0" onChange={e => setField('bonusPercent', e.target.value === '' ? 0 : Number(e.target.value))} />
                             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Har buyurtmadan beriladigan bonus</div>
                         </div>
                         <div className="form-group">
                             <label className="form-label">Maks bonus ishlatish (%)</label>
-                            <input className="form-input" type="number" value={settings.maxBonusPercent || 20} onChange={e => setField('maxBonusPercent', parseInt(e.target.value) || 20)} />
+                            <input className="form-input" type="number" value={settings.maxBonusPercent ?? 20} min="0" max="100" onChange={e => setField('maxBonusPercent', e.target.value === '' ? 0 : parseInt(e.target.value))} />
                             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Buyurtma summasidan qancha bonus ishlatish mumkin</div>
                         </div>
 

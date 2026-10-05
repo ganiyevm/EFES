@@ -6,8 +6,13 @@ const mongoose = require('mongoose');
 const TOKEN = process.env.BOT_TOKEN;
 const BASE_URL = process.env.BASE_URL || 'https://efes-app-production.up.railway.app';
 const WEBAPP_URL = process.env.WEBAPP_URL || BASE_URL;
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'efes_webhook_secret_prod';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!WEBHOOK_SECRET) {
+    console.error('❌ WEBHOOK_SECRET o\'rnatilmagan — webhook xavfsizligini ta\'minlab bo\'lmaydi.');
+    process.exit(1);
+}
 
 mongoose.connect(MONGODB_URI, {
     maxPoolSize: 2,
@@ -24,6 +29,7 @@ const Operator = require('./src/models/Operator');
 const OrderStatusService = require('./src/services/orderStatus.service');
 const CourierBotService = require('./src/services/courierBot.service');
 const TelegramService = require('./src/services/telegram.service');
+const { escapeHtml: h } = require('./src/utils/html');
 
 const api = axios.create({ baseURL: `https://api.telegram.org/bot${TOKEN}` });
 
@@ -89,7 +95,7 @@ const TEXTS = {
                 rejected: '❌ Rad etildi',
                 cancelled: '🚫 Bekor qilindi',
             };
-            const items = o.items.map(i => `  • ${i.productName} x${i.qty}`).join('\n');
+            const items = o.items.map(i => `  • ${h(i.productName)} x${i.qty}`).join('\n');
             return `📋 <b>${o.orderNumber}</b>\n` +
                 `${statusLabels[o.status] || o.status}\n\n` +
                 `🍽 ${items}\n\n` +
@@ -128,7 +134,7 @@ const TEXTS = {
                 rejected: '❌ Отклонён',
                 cancelled: '🚫 Отменён',
             };
-            const items = o.items.map(i => `  • ${i.productName} x${i.qty}`).join('\n');
+            const items = o.items.map(i => `  • ${h(i.productName)} x${i.qty}`).join('\n');
             return `📋 <b>${o.orderNumber}</b>\n` +
                 `${statusLabels[o.status] || o.status}\n\n` +
                 `🍽 ${items}\n\n` +
@@ -167,7 +173,7 @@ const TEXTS = {
                 rejected: '❌ Rejected',
                 cancelled: '🚫 Cancelled',
             };
-            const items = o.items.map(i => `  • ${i.productName} x${i.qty}`).join('\n');
+            const items = o.items.map(i => `  • ${h(i.productName)} x${i.qty}`).join('\n');
             return `📋 <b>${o.orderNumber}</b>\n` +
                 `${statusLabels[o.status] || o.status}\n\n` +
                 `🍽 ${items}\n\n` +
@@ -306,7 +312,7 @@ async function handleStart(msg) {
             if (!branch.operatorIds.includes(from.id)) branch.operatorIds.push(from.id);
             await branch.save();
             await sendMessage(chatId,
-                `✅ Siz <b>${branch.name || `Filial #${branch.number}`}</b> filiali operatori sifatida ulandi!\n\n` +
+                `✅ Siz <b>${h(branch.name || `Filial #${branch.number}`)}</b> filiali operatori sifatida ulandi!\n\n` +
                 `Endi yangi buyurtmalar sizga yuboriladi. 🔔`
             );
         } catch (e) {
@@ -317,7 +323,7 @@ async function handleStart(msg) {
     }
 
     const isNew = !user.phone;
-    const name = user.firstName || from.first_name || 'Mehmon';
+    const name = h(user.firstName || from.first_name || 'Mehmon');
     const welcomeText = isNew ? t(user.language, 'welcome', name) : t(user.language, 'welcomeBack', name);
 
     const keyboard = {
@@ -418,6 +424,90 @@ async function handleHelp(msg) {
     await sendMessage(msg.chat.id, t(lang, 'helpText'));
 }
 
+
+// ─── Operator: buyurtma bosqichlari ──────────────────────────────────────
+// Har bosqichdan keyin xabar yangilanadi va keyingi bosqich tugmasi chiqadi,
+// shuning uchun operator buyurtmani to'liq Telegram'dan boshqara oladi.
+const OP_ACTIONS = {
+    confirm: { to: 'confirmed', from: ['pending_operator'], done: '✅ Tasdiqlandi' },
+    reject: { to: 'rejected', from: ['pending_operator', 'confirmed'], done: '❌ Rad etildi' },
+    prep: { to: 'preparing', from: ['confirmed'], done: '🍳 Tayyorlanmoqda' },
+    ready: { to: 'ready', from: ['confirmed', 'preparing'], done: '📦 Tayyor' },
+    done: { to: 'delivered', from: ['confirmed', 'preparing', 'ready'], done: '🎉 Mijozga berildi' },
+};
+
+function operatorKeyboard(order) {
+    const id = order._id;
+    const rows = [];
+    if (order.status === 'confirmed') {
+        rows.push([{ text: '🍳 Tayyorlanmoqda', callback_data: `prep_${id}` }, { text: '📦 Tayyor', callback_data: `ready_${id}` }]);
+    } else if (order.status === 'preparing') {
+        rows.push([{ text: '📦 Tayyor', callback_data: `ready_${id}` }]);
+    }
+    // Olib ketishda kurier yo'q — operator mijozga topshirganini o'zi belgilaydi
+    if (order.deliveryType === 'pickup' && ['confirmed', 'preparing', 'ready'].includes(order.status)) {
+        rows.push([{ text: '🎉 Mijozga berildi', callback_data: `done_${id}` }]);
+    }
+    if (order.deliveryType === 'delivery' && typeof order.addressLat === 'number' && typeof order.addressLng === 'number') {
+        rows.push([{ text: "🗺 Yandex Xaritada ko'rish", url: `https://yandex.com/maps/?pt=${order.addressLng},${order.addressLat}&z=17&l=map` }]);
+    }
+    return { inline_keyboard: rows };
+}
+
+async function handleOperatorAction(callback, action, orderId) {
+    const { id, from, message } = callback;
+    const chatId = message?.chat?.id;
+    const messageId = message?.message_id;
+    const spec = OP_ACTIONS[action];
+
+    const order = await Order.findById(orderId);
+    if (!order) { await answerCb(id, 'Buyurtma topilmadi', true); return; }
+
+    // Operator tekshiruvi: chat ID yoki operatorIds ro'yxatida bo'lishi kerak
+    const branch = await Branch.findById(order.branch).select('operatorChatId operatorIds').lean();
+    const isOperator = branch &&
+        (branch.operatorChatId === from.id || (branch.operatorIds || []).includes(from.id));
+    if (!isOperator) {
+        await answerCb(id, 'Sizda bu amalni bajarish huquqi yo\'q.', true);
+        return;
+    }
+
+    if (action === 'done' && order.deliveryType !== 'pickup') {
+        await answerCb(id, 'Yetkazib berishni kurier belgilaydi.', true);
+        return;
+    }
+    if (!spec.from.includes(order.status)) {
+        const label = { delivered: 'yetkazilgan', cancelled: 'bekor qilingan', rejected: 'rad etilgan' }[order.status] || order.status;
+        await answerCb(id, `Buyurtma holati: ${label}`, true);
+        return;
+    }
+
+    const prevStatus = order.status;
+    try {
+        await OrderStatusService.applyTransition(order, spec.to, {
+            changedBy: 'operator',
+            note: `Operator: ${from.first_name || ''} (tg: ${from.id})`,
+        });
+    } catch (e) {
+        await answerCb(id, e.message, true);
+        return;
+    }
+
+    await answerCb(id, `${spec.done}: ${order.orderNumber}`, action === 'confirm' || action === 'reject');
+
+    if (chatId && messageId) {
+        const text = TelegramService.formatOperatorDetail(order) +
+            `\n\n<b>${spec.done}</b> — ${h(from.first_name || '')}`;
+        await editMessage(chatId, messageId, text, { reply_markup: operatorKeyboard(order) });
+    }
+
+    TelegramService.notifyCustomerStatus(order, action === 'reject' ? { note: 'Savollar bo\'lsa operator bilan bog\'laning.' } : {}).catch(() => {});
+
+    if (action === 'confirm' && prevStatus !== 'confirmed') {
+        CourierBotService.broadcastNewOrder(order).catch(e => console.error('Courier broadcast:', e.message));
+    }
+}
+
 // ─── Callback query handler ───────────────────────────────────────────────
 async function handleCallback(callback) {
     const { id, data, from, message } = callback;
@@ -438,101 +528,10 @@ async function handleCallback(callback) {
         return;
     }
 
-    // ─── Operator: buyurtmani tasdiqlash ──────────────────────────────
-    if (data.startsWith('confirm_')) {
-        const orderId = data.replace('confirm_', '');
-
-        const order = await Order.findById(orderId).populate('branch', 'operatorChatId operatorIds');
-        if (!order) { await answerCb(id, 'Buyurtma topilmadi', true); return; }
-
-        // Operator tekshiruvi: chat ID yoki operatorIds ro'yxatida bo'lishi kerak
-        const branch = order.branch;
-        const isOperator = branch &&
-            (branch.operatorChatId === from.id || (branch.operatorIds || []).includes(from.id));
-        if (!isOperator) {
-            await answerCb(id, 'Sizda bu amalni bajarish huquqi yo\'q.', true);
-            return;
-        }
-
-        if (!['pending_operator'].includes(order.status)) {
-            await answerCb(id, `Status allaqachon: ${order.status}`, true);
-            return;
-        }
-
-        await OrderStatusService.applyTransition(order, 'confirmed', {
-            changedBy: 'operator',
-            note: `Operator tomonidan tasdiqlandi (tg: ${from.id})`,
-        });
-
-        // Popup alert — operatorda dialog ko'rinadi
-        await answerCb(id, `✅ ${order.orderNumber} tasdiqlandi!`, true);
-
-        if (chatId && messageId) {
-            await editMessage(
-                chatId,
-                messageId,
-                (message.text || '') + `\n\n✅ <b>Tasdiqlandi</b> — ${from.first_name}`,
-            );
-        }
-
-        // Operator uchun signal xabar
-        await sendMessage(chatId,
-            `✅ <b>${order.orderNumber}</b> tasdiqlandi!\n` +
-            `👨‍🍳 Oshxona tayyorlashni boshlaydi.\n` +
-            `💰 ${order.total.toLocaleString()} so'm · ${order.deliveryType === 'delivery' ? '🚗 Yetkazib berish' : '🏃 Olib ketish'}`
-        );
-
-        TelegramService.notifyCustomerStatus(order).catch(() => {});
-        CourierBotService.broadcastNewOrder(order).catch(e => console.error('Courier broadcast:', e.message));
-        return;
-    }
-
-    // ─── Operator: buyurtmani rad etish ──────────────────────────────
-    if (data.startsWith('reject_')) {
-        const orderId = data.replace('reject_', '');
-
-        const order = await Order.findById(orderId).populate('branch', 'operatorChatId operatorIds');
-        if (!order) { await answerCb(id, 'Buyurtma topilmadi', true); return; }
-
-        const branch = order.branch;
-        const isOperator = branch &&
-            (branch.operatorChatId === from.id || (branch.operatorIds || []).includes(from.id));
-        if (!isOperator) {
-            await answerCb(id, 'Sizda bu amalni bajarish huquqi yo\'q.', true);
-            return;
-        }
-
-        if (!['pending_operator', 'confirmed'].includes(order.status)) {
-            await answerCb(id, `Status allaqachon: ${order.status}`, true);
-            return;
-        }
-
-        await OrderStatusService.applyTransition(order, 'rejected', {
-            changedBy: 'operator',
-            note: `Operator tomonidan rad etildi (tg: ${from.id})`,
-        });
-
-        await answerCb(id, `❌ ${order.orderNumber} rad etildi`, true);
-
-        if (chatId && messageId) {
-            await editMessage(
-                chatId,
-                messageId,
-                (message.text || '') + `\n\n❌ <b>Rad etildi</b> — ${from.first_name}`,
-            );
-        }
-
-        // Operator uchun signal xabar
-        await sendMessage(chatId,
-            `❌ <b>${order.orderNumber}</b> rad etildi.\n` +
-            `Mijozga xabar yuborildi.`
-        );
-
-        TelegramService.notifyCustomerStatus(order, { note: 'Operator bilan bog\'laning.' }).catch(() => {});
-
-        if (order.courierBroadcasts?.length) {
-            CourierBotService.clearBroadcasts(order._id).catch(() => {});
-        }
+    // ─── Operator amallari: tasdiqlash / rad etish / tayyorlash bosqichlari ───
+    const opMatch = data.match(/^(confirm|reject|prep|ready|done)_([a-f0-9]{24})$/);
+    if (opMatch) {
+        await handleOperatorAction(callback, opMatch[1], opMatch[2]);
         return;
     }
 
@@ -570,6 +569,11 @@ const app = express();
 app.use(express.json());
 
 app.post('/bot-webhook', (req, res) => {
+    // Ikkinchi bosqich himoya: to'g'ridan-to'g'ri 3001-portga urinishlarni ham rad etadi.
+    const secret = req.headers['x-telegram-bot-api-secret-token'];
+    if (secret !== WEBHOOK_SECRET) {
+        return res.status(403).json({ ok: false });
+    }
     res.json({ ok: true });
     processUpdate(req.body).catch(e => console.error('Webhook handler:', e.message));
 });

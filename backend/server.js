@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./src/config/db');
 const errorHandler = require('./src/middleware/errorHandler');
@@ -11,6 +12,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
+
+// ─── Javoblarni gzip qilish (trafik va yuklanish tezligi uchun) ───
+// SSE (text/event-stream) ni SIQMAYMIZ — gzip buffer real-vaqt eventlarni
+// ushlab qolib, buyurtma holati jonli yangilanishini buzadi.
+app.use(compression({
+    filter: (req, res) => {
+        const type = String(res.getHeader('Content-Type') || '');
+        if (type.includes('text/event-stream')) return false;
+        return compression.filter(req, res);
+    },
+}));
 
 // ─── Security ───
 app.use(helmet({
@@ -45,9 +57,15 @@ app.use(cors({
 }));
 
 // ─── Rate Limiting ───
+// Mobil operatorlarda ko'p mijoz bitta IP ortida (CGNAT) bo'ladi, to'lov sahifasi esa
+// har necha soniyada holatni so'raydi — shuning uchun umumiy limit keng.
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200,
+    max: 1500,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // To'lov tizimlari webhooklari limitga tushmasin (o'z himoyasi: imzo/auth)
+    skip: (req) => req.path.startsWith('/payment/payme') || req.path.startsWith('/payment/click/'),
     message: { error: 'Juda ko\'p so\'rov. 15 daqiqadan keyin qayta urinib ko\'ring.' },
 });
 app.use('/api/', limiter);
@@ -65,9 +83,18 @@ const clickLimiter = rateLimit({
     message: { error: 'Click rate limit' },
 });
 
+// Login uchun qat'iy limiter — brute-force oldini oladi.
+// skipSuccessfulRequests: muvaffaqiyatli kirishlar limitga hisoblanmaydi.
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Juda ko\'p urinish. 15 daqiqadan keyin qayta urinib ko\'ring.' },
+    skipSuccessfulRequests: true,
+});
+
 // ─── Body Parser ───
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ─── Request logger (faqat development) ───
 if (process.env.NODE_ENV !== 'production') {
@@ -80,6 +107,8 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ─── Routes ───
+// Login endpointlariga qat'iy limiter (router mount'idan oldin)
+app.use('/api/admin/login', authLimiter);
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/products', require('./src/routes/products'));
 app.use('/api/categories', require('./src/routes/categories'));
@@ -98,12 +127,12 @@ app.use('/api/operators', require('./src/routes/operators'));
 // ─── Emergency parol tiklash (ADMIN_RESET_SECRET orqali) ───
 app.post('/api/emergency-reset', strictLimiter, async (req, res) => {
     try {
-        const { secret, username, newPassword } = req.body;
+        const { secret, username, newPassword } = req.body || {};
         const RESET_SECRET = process.env.ADMIN_RESET_SECRET;
         if (!RESET_SECRET || secret !== RESET_SECRET) {
             return res.status(403).json({ error: 'Noto\'g\'ri maxfiy kalit' });
         }
-        if (!username || !newPassword || newPassword.length < 8) {
+        if (typeof username !== 'string' || typeof newPassword !== 'string' || newPassword.length < 8) {
             return res.status(400).json({ error: 'username va newPassword (min 8 ta belgi) kerak' });
         }
         const bcrypt = require('bcryptjs');
@@ -118,7 +147,7 @@ app.post('/api/emergency-reset', strictLimiter, async (req, res) => {
         console.log(`[EMERGENCY RESET] ${username} paroli tiklandi`);
         res.json({ success: true, username: account.username });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Server xatosi' });
     }
 });
 
@@ -126,7 +155,7 @@ app.post('/api/emergency-reset', strictLimiter, async (req, res) => {
 const CourierBotService = require('./src/services/courierBot.service');
 app.post('/courier-webhook', (req, res) => {
     const secret = req.headers['x-telegram-bot-api-secret-token'];
-    if (secret !== CourierBotService.webhookSecret) {
+    if (!CourierBotService.webhookSecret || secret !== CourierBotService.webhookSecret) {
         return res.status(403).json({ ok: false });
     }
     res.json({ ok: true });
@@ -134,7 +163,7 @@ app.post('/courier-webhook', (req, res) => {
 });
 app.post('/courier-mission-webhook', (req, res) => {
     const secret = req.headers['x-telegram-bot-api-secret-token'];
-    if (secret !== CourierBotService.webhookSecret) {
+    if (!CourierBotService.webhookSecret || secret !== CourierBotService.webhookSecret) {
         return res.status(403).json({ ok: false });
     }
     res.json({ ok: true });
@@ -142,8 +171,14 @@ app.post('/courier-mission-webhook', (req, res) => {
 });
 
 // ─── Telegram Bot Webhook Proxy ───
+// Telegram secret_token'ni chekkada tekshiramiz — soxta (Telegram'dan kelmagan)
+// so'rovlar botga umuman uzatilmaydi.
 const http = require('http');
 app.post('/bot-webhook', (req, res) => {
+    const secret = req.headers['x-telegram-bot-api-secret-token'];
+    if (!process.env.WEBHOOK_SECRET || secret !== process.env.WEBHOOK_SECRET) {
+        return res.status(403).json({ ok: false });
+    }
     const data = JSON.stringify(req.body);
     const proxyReq = http.request({
         hostname: 'localhost',
@@ -174,8 +209,13 @@ app.post('/click/complete', clickLimiter, async (req, res) => {
 
 // ─── Health Check ───
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', service: 'EFES Delivery', timestamp: new Date().toISOString() });
+    const mongoose = require('mongoose');
+    const dbOk = mongoose.connection.readyState === 1;
+    res.status(dbOk ? 200 : 503).json({ status: dbOk ? 'OK' : 'DB_DOWN', service: 'EFES Delivery', timestamp: new Date().toISOString() });
 });
+
+// Noma'lum API yo'li — SPA index.html emas, JSON 404 qaytsin
+app.use('/api', (req, res) => res.status(404).json({ error: 'Topilmadi' }));
 
 // ─── Uploads (menu images) ───
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
@@ -208,6 +248,7 @@ app.use(errorHandler);
 const start = async () => {
     await connectDB();
     require('./src/jobs/dailyAnalytics');
+    require('./src/jobs/expireUnpaidOrders');
     app.listen(PORT, () => {
         console.log(`🍽 EFES Delivery API ishga tushdi: http://localhost:${PORT}`);
         // Cluster rejimida faqat birinchi instance webhookni ro'yxatga oladi

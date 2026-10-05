@@ -10,17 +10,22 @@ const CourierBotService = require('../services/courierBot.service');
 const OrderStatusService = require('../services/orderStatus.service');
 const bcrypt = require('bcryptjs');
 const { authAdmin, authSuperAdmin } = require('../middleware/auth');
+const { tashkentDayStart } = require('../utils/time');
 
 const MAX_PAGE_SIZE = 100;
 const safeLimit = (n) => Math.min(Math.max(parseInt(n) || 20, 1), MAX_PAGE_SIZE);
 const safePage = (n) => Math.max(parseInt(n) || 1, 1);
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const prevStatusSame = (order, status) => order.status === status;
 
 // ─── Login (ochiq route — authAdmin dan oldin) ───
 router.post('/login', async (req, res) => {
     try {
-        const { username, password } = req.body;
-        const account = await AdminAccount.findOne({ username });
+        const { username, password } = req.body || {};
+        if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
+            return res.status(400).json({ error: 'Login va parolni kiriting' });
+        }
+        const account = await AdminAccount.findOne({ username: username.trim() });
         if (!account) return res.status(401).json({ error: 'Login yoki parol xato' });
 
         const valid = await bcrypt.compare(password, account.password);
@@ -43,8 +48,7 @@ router.use(authAdmin);
 // ─── Dashboard stats ───
 router.get('/stats', async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = tashkentDayStart();
 
         const [totalOrders, todayOrders, totalRevenue, todayRevenue, totalUsers, totalProducts, activeOrders] = await Promise.all([
             Order.countDocuments(),
@@ -171,12 +175,23 @@ router.get('/recent-orders', async (req, res) => {
 // ─── Buyurtmalar (Admin) ───
 router.get('/orders', async (req, res) => {
     try {
-        const { status, branch } = req.query;
+        const { status, branch, q } = req.query;
         const page = safePage(req.query.page);
         const limit = safeLimit(req.query.limit);
         const filter = {};
-        if (status) filter.status = status;
-        if (branch) filter.branch = branch;
+        if (status === 'active') filter.status = { $in: ['pending_operator', 'confirmed', 'preparing', 'ready', 'on_the_way'] };
+        else if (status) filter.status = String(status);
+        if (branch && require('mongoose').isValidObjectId(branch)) filter.branch = branch;
+        if (q && String(q).trim()) {
+            const term = String(q).trim();
+            const regex = new RegExp(escapeRegex(term), 'i');
+            const digits = term.replace(/\D/g, '');
+            filter.$or = [
+                { orderNumber: regex },
+                { customerName: regex },
+                ...(digits.length >= 3 ? [{ phone: new RegExp(digits) }, { extraPhone: new RegExp(digits) }] : []),
+            ];
+        }
 
         const skip = (page - 1) * limit;
         const [orders, total] = await Promise.all([
@@ -213,6 +228,12 @@ router.patch('/orders/:id/assign-courier', async (req, res) => {
         const { courierId } = req.body;
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (order.deliveryType !== 'delivery') {
+            return res.status(400).json({ error: 'Olib ketish buyurtmasiga kurier kerak emas' });
+        }
+        if (!['confirmed', 'preparing', 'ready', 'on_the_way'].includes(order.status)) {
+            return res.status(400).json({ error: 'Kurierni faqat faol buyurtmaga tayinlash mumkin' });
+        }
 
         if (!courierId) {
             order.courierId = null;
@@ -221,6 +242,9 @@ router.patch('/orders/:id/assign-courier', async (req, res) => {
             const courier = await Courier.findById(courierId);
             if (!courier) return res.status(404).json({ error: 'Kurier topilmadi' });
             if (!courier.isActive) return res.status(400).json({ error: 'Kurier nofaol' });
+            if (order.courierBroadcasts?.length) {
+                CourierBotService.clearBroadcasts(order._id).catch(() => {});
+            }
             order.courierId = courier._id;
             order.statusHistory.push({
                 status: order.status,
@@ -256,6 +280,7 @@ router.patch('/orders/:id/status', async (req, res) => {
         const { status, note, force } = req.body;
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
+        if (prevStatusSame(order, status)) return res.status(400).json({ error: 'Buyurtma allaqachon shu holatda' });
 
         const prevStatus = order.status;
         try {
@@ -273,21 +298,17 @@ router.patch('/orders/:id/status', async (req, res) => {
 
         TelegramService.notifyCustomerStatus(order, { note: note || '' }).catch(() => {});
 
-        // Tasdiqlanganda kurierlar botiga broadcast (faqat tayinlanmagan bo'lsa)
+        // Tasdiqlanganda kurierlar botiga broadcast (faqat yetkazish va tayinlanmagan bo'lsa).
+        // Bekor qilishdagi qaytarishlar (bonus, promo, broadcast) OrderStatusService ichida.
         if (status === 'confirmed' && prevStatus !== 'confirmed' && !order.courierId) {
             CourierBotService.broadcastNewOrder(order).catch(e => console.error('Courier broadcast:', e.message));
         }
-        // Bekor qilinsa — broadcast tozalash + promo counter qaytarish
-        if (status === 'cancelled' || status === 'rejected') {
-            if (order.courierBroadcasts?.length) {
-                CourierBotService.clearBroadcasts(order._id).catch(() => {});
-            }
-            if (order.appliedPromo && prevStatus !== 'cancelled' && prevStatus !== 'rejected') {
-                const Promotion = require('../models/Promotion');
-                await Promotion.findByIdAndUpdate(order.appliedPromo, { $inc: { usageCount: -1 } });
-            }
+        if (status === 'cancelled' && prevStatus === 'pending_operator') {
+            TelegramService.notifyOperatorCancelled(order).catch(() => {});
         }
 
+        await order.populate('branch', 'name number');
+        await order.populate('courierId', 'name phone carPlate');
         res.json(order);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -295,10 +316,25 @@ router.patch('/orders/:id/status', async (req, res) => {
 });
 
 // ─── Mahsulotlar (Admin) ───
+// Admin uchun — nofaol mahsulotlar ham ko'rinadi (qayta yoqish uchun)
 router.get('/products', async (req, res) => {
     try {
-        const products = await Product.find().sort({ category: 1, name: 1 });
-        res.json(products);
+        const { category, search, status } = req.query;
+        const page = safePage(req.query.page);
+        const limit = safeLimit(req.query.limit);
+        const filter = {};
+        if (category) filter.category = String(category);
+        if (status === 'active') filter.isActive = true;
+        if (status === 'inactive') filter.isActive = false;
+        if (search) {
+            const regex = new RegExp(escapeRegex(search), 'i');
+            filter.$or = [{ name: regex }, { ingredients: regex }];
+        }
+        const [products, total] = await Promise.all([
+            Product.find(filter).sort({ isActive: -1, category: 1, name: 1 }).skip((page - 1) * limit).limit(limit),
+            Product.countDocuments(filter),
+        ]);
+        res.json({ products, total, page, pages: Math.ceil(total / limit) });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -339,7 +375,7 @@ router.get('/users', async (req, res) => {
 // ─── Foydalanuvchini bloklash / ochish ───
 router.patch('/users/:id/block', async (req, res) => {
     try {
-        const { isBlocked } = req.body;
+        const isBlocked = req.body?.isBlocked === true;
         const user = await User.findByIdAndUpdate(req.params.id, { isBlocked }, { new: true });
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
         res.json(user);
@@ -382,13 +418,17 @@ router.post('/accounts', authSuperAdmin, async (req, res) => {
     try {
         const { username, password, role } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'username va password kerak' });
+        if (role && !['super_admin', 'admin', 'manager'].includes(role)) return res.status(400).json({ error: 'Noto\'g\'ri rol' });
+        if (await AdminAccount.exists({ username: String(username).trim() })) {
+            return res.status(400).json({ error: 'Bu login band' });
+        }
         if (password.length < 8) return res.status(400).json({ error: 'Parol kamida 8 ta belgi bo\'lishi kerak' });
         // faqat super_admin boshqa super_admin yarata oladi
         if (role === 'super_admin' && req.admin.role !== 'super_admin') {
             return res.status(403).json({ error: 'Super admin faqat super admin tomonidan yaratilishi mumkin' });
         }
         const hashed = await bcrypt.hash(password, 10);
-        const account = await AdminAccount.create({ username, password: hashed, role: role || 'admin' });
+        const account = await AdminAccount.create({ username: String(username).trim(), password: hashed, role: role || 'admin' });
         res.status(201).json({ id: account._id, username, role: account.role });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -406,6 +446,9 @@ router.put('/accounts/:id/role', async (req, res) => {
         // Har doim faqat super_admin rol o'zgartira oladi
         if (req.admin?.role !== 'super_admin') {
             return res.status(403).json({ error: 'Faqat super admin rol o\'zgartira oladi' });
+        }
+        if (String(req.params.id) === String(req.admin.adminId) && role !== 'super_admin') {
+            return res.status(400).json({ error: 'O\'z rolingizni pasaytira olmaysiz' });
         }
 
         const account = await AdminAccount.findByIdAndUpdate(
@@ -480,8 +523,9 @@ router.get('/settings', async (req, res) => {
 
 router.put('/settings', async (req, res) => {
     try {
-        const updates = req.body;
+        const updates = req.body || {};
         for (const [key, value] of Object.entries(updates)) {
+            if (key === 'delivery' || key === 'app_content') continue; // o'z endpointlari bor (validatsiya + cache)
             await Settings.findOneAndUpdate({ key }, { key, value }, { upsert: true });
         }
         res.json({ success: true });

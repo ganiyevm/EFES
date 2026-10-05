@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { useT } from '../i18n';
 import api from '../api';
 import { getProductImage } from '../utils/productImage';
@@ -17,11 +18,22 @@ export default function ProductDetail() {
     const [qty, setQty] = useState(1);
     const [note, setNote] = useState('');
     const [added, setAdded] = useState(false);
+    const { user, setUser } = useAuth();
+    const isFav = !!user?.favorites?.some(f => String(f) === String(id));
+
+    const toggleFav = async () => {
+        if (!user) return;
+        try {
+            const r = await api.post(`/user/favorites/${id}`);
+            setUser({ ...user, favorites: r.data });
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light');
+        } catch { }
+    };
 
     useEffect(() => {
         api.get(`/products/${id}`)
             .then(r => setProduct(r.data))
-            .catch(() => navigate(-1))
+            .catch(() => navigate('/', { replace: true }))
             .finally(() => setLoading(false));
     }, [id]);
 
@@ -70,8 +82,17 @@ export default function ProductDetail() {
                         stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M19 12H5M12 5l-7 7 7 7" />
                     </svg>
-                    <span>Orqaga</span>
+                    <span>{t('goBack')}</span>
                 </button>
+
+                {/* Sevimli */}
+                {user && (
+                    <button onClick={toggleFav} aria-label={isFav ? t('removeFavorite') : t('addFavorite')} style={{
+                        position: 'absolute', bottom: 24, right: 16, width: 46, height: 46, borderRadius: 23,
+                        background: 'rgba(13,13,20,0.75)', border: '1.5px solid rgba(255,255,255,0.18)',
+                        fontSize: 22, cursor: 'pointer', backdropFilter: 'blur(12px)', zIndex: 2,
+                    }}>{isFav ? '❤️' : '🤍'}</button>
+                )}
 
                 {/* Badges */}
                 <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>

@@ -23,6 +23,10 @@ const CATS = [
     { key: 'drink', label: 'Ichimliklar', cue: 'Cold' },
     { key: 'dessert', label: 'Desertlar', cue: 'Sweet' },
     { key: 'garnir', label: 'Garnirlar', cue: 'Side' },
+    { key: 'manti', label: 'Manti', cue: 'Steam' },
+    { key: 'hot_dog', label: 'Hot Dog', cue: 'Fast' },
+    { key: 'sous', label: 'Souslar', cue: 'Extra' },
+    { key: 'other', label: 'Boshqa', cue: 'Menu' },
 ];
 
 function groupByCategory(products) {
@@ -42,7 +46,7 @@ function groupByCategory(products) {
 export default function Home() {
     const { user } = useAuth();
     const { items, addItem } = useCart();
-    const { lang } = useT();
+    const { lang, t } = useT();
     const navigate = useNavigate();
     const debounceRef = useRef(null);
 
@@ -81,7 +85,7 @@ export default function Home() {
     const visibleCats = useMemo(() => {
         const groups = groupByCategory(products);
         return [{ key: 'all', label: 'Barchasi', cue: `${products.length} ta` }, ...groups.map(g => {
-            const cat = CATS.find(c => c.key === g.key) || { key: g.key, label: g.key, cue: 'Menu' };
+            const cat = CATS.find(c => c.key === g.key) || { key: g.key, label: t(`cat_${g.key}`), cue: 'Menu' };
             return { ...cat, count: g.items.length };
         })];
     }, [products]);

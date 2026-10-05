@@ -1,9 +1,8 @@
 const router = require('express').Router();
-const Order = require('../models/Order');
-const Courier = require('../models/Courier');
 const Settings = require('../models/Settings');
 const { authAdmin } = require('../middleware/auth');
 const { getDeliveryConfig, setDeliveryConfig } = require('../utils/deliveryConfig');
+const { availablePaymentMethods } = require('../services/paymentUrl.service');
 
 const APP_CONTENT_DEFAULT = {
     phone: '+998 71 200-94-44',
@@ -48,6 +47,9 @@ router.get('/config', async (req, res) => {
             estimatedDeliveryTime: cfg.estimatedDeliveryTime,
             workHours: cfg.workHours,
             isOpen: cfg.isOpen,
+            bonusPercent: cfg.bonusPercent,
+            maxBonusPercent: cfg.maxBonusPercent,
+            paymentMethods: availablePaymentMethods(),
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -68,10 +70,10 @@ router.get('/settings', async (req, res) => {
 
 router.put('/settings', async (req, res) => {
     try {
-        const value = await setDeliveryConfig(req.body);
+        const value = await setDeliveryConfig(req.body || {});
         res.json(value);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
@@ -87,71 +89,17 @@ router.get('/app-content/admin', async (req, res) => {
 router.put('/app-content', async (req, res) => {
     try {
         const current = await getAppContent();
-        const value = { ...current, ...req.body };
+        const patch = {};
+        for (const k of Object.keys(APP_CONTENT_DEFAULT)) {
+            if (req.body?.[k] !== undefined) patch[k] = req.body[k];
+        }
+        const value = { ...current, ...patch };
         await Settings.findOneAndUpdate(
             { key: 'app_content' },
             { $set: { value } },
             { upsert: true, new: true }
         );
         res.json(value);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ─── Kurier tayinlash ───
-router.patch('/orders/:id/assign', async (req, res) => {
-    try {
-        const { courierId } = req.body;
-        const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-
-        const courier = await Courier.findById(courierId);
-        if (!courier) return res.status(404).json({ error: 'Kurier topilmadi' });
-        if (!courier.isActive) return res.status(400).json({ error: 'Kurier nofaol' });
-
-        order.courierId = courier._id;
-        order.status = 'on_the_way';
-        order.dispatchedAt = new Date();
-        order.statusHistory.push({
-            status: 'on_the_way',
-            changedBy: 'admin',
-            note: `Kurier: ${courier.name} (${courier.phone})`,
-        });
-        await order.save();
-
-        res.json(order);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ─── Yetkazildi deb belgilash + kurier bonusi ───
-router.patch('/orders/:id/deliver', async (req, res) => {
-    try {
-        const order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-
-        const wasDelivered = order.status === 'delivered';
-
-        order.status = 'delivered';
-        order.deliveredAt = order.deliveredAt || new Date();
-        if (order.paymentMethod === 'cash') order.paymentStatus = 'paid';
-        order.statusHistory.push({ status: 'delivered', changedBy: 'courier' });
-        await order.save();
-
-        // Kurier bonusini oshirish (faqat birinchi marta delivered bo'lganda)
-        if (!wasDelivered && order.courierId) {
-            const courier = await Courier.findById(order.courierId);
-            if (courier?.bonusEnabled && courier.bonusPerDelivery > 0) {
-                await Courier.updateOne(
-                    { _id: courier._id },
-                    { $inc: { earnedBonus: courier.bonusPerDelivery } },
-                );
-            }
-        }
-
-        res.json(order);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -51,7 +51,8 @@ router.post('/telegram', async (req, res) => {
             .update(dataCheckString)
             .digest('hex');
 
-        if (calculatedHash !== hash) {
+        if (!hash || calculatedHash.length !== hash.length ||
+            !crypto.timingSafeEqual(Buffer.from(calculatedHash), Buffer.from(hash))) {
             return res.status(401).json({ error: 'Yaroqsiz initData' });
         }
 
@@ -63,14 +64,18 @@ router.post('/telegram', async (req, res) => {
         }
 
         // User ma'lumotlarini olish
-        const userData = JSON.parse(params.get('user'));
+        let userData;
+        try { userData = JSON.parse(params.get('user') || ''); } catch { userData = null; }
+        if (!userData?.id) return res.status(400).json({ error: 'initData da foydalanuvchi yo\'q' });
         const { id: telegramId, first_name, last_name, username } = userData;
 
         // User yaratish yoki yangilash
         let user = await User.findOne({ telegramId });
         if (!user) {
+            const lc = userData.language_code;
             user = await User.create({
                 telegramId,
+                language: lc === 'ru' ? 'ru' : lc === 'en' ? 'en' : 'uz',
                 firstName: first_name || '',
                 lastName: last_name || '',
                 username: username || '',
@@ -88,7 +93,9 @@ router.post('/telegram', async (req, res) => {
         const accessToken = generateAccessToken({ userId: user._id, telegramId });
         const refreshToken = await generateRefreshToken(user, req.headers['user-agent'] || '');
 
-        res.json({ token: accessToken, refreshToken, user });
+        const safeUser = user.toObject();
+        delete safeUser.otpCode; delete safeUser.otpExpiry; delete safeUser.otpSentAt;
+        res.json({ token: accessToken, refreshToken, user: safeUser });
     } catch (err) {
         console.error('Auth error:', err);
         res.status(500).json({ error: 'Server xatosi' });
@@ -110,6 +117,7 @@ router.post('/refresh', async (req, res) => {
 
         const user = await User.findById(stored.user);
         if (!user) return res.status(401).json({ error: 'Foydalanuvchi topilmadi' });
+        if (user.isBlocked) return res.status(403).json({ error: 'Hisobingiz bloklangan' });
 
         // Eski refresh tokenni o'chirib yangi chiqarish (rotation)
         await RefreshToken.deleteOne({ _id: stored._id });

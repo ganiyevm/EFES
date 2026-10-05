@@ -94,7 +94,7 @@ export default function BranchesList() {
 
     const fetchBranches = () => {
         setLoading(true);
-        api.get('/branches').then(r => setBranches(r.data || [])).catch(() => { }).finally(() => setLoading(false));
+        api.get('/admin/branches').then(r => setBranches(r.data || [])).catch(() => { }).finally(() => setLoading(false));
     };
     useEffect(fetchBranches, []);
 
@@ -112,7 +112,7 @@ export default function BranchesList() {
                 ...form,
                 number: parseInt(form.number),
                 deliveryRadius: parseFloat(form.deliveryRadius) || 5,
-                minOrderAmount: parseInt(form.minOrderAmount) || 30000,
+                minOrderAmount: Number.isFinite(parseInt(form.minOrderAmount)) ? parseInt(form.minOrderAmount) : 0,
                 location: { lat: parseFloat(form.location.lat) || 0, lng: parseFloat(form.location.lng) || 0 },
             };
             if (modal === 'add') {
@@ -129,7 +129,7 @@ export default function BranchesList() {
         try {
             await api.put(`/branches/${b._id}`, { [field]: !b[field] });
             fetchBranches();
-        } catch { }
+        } catch (err) { alert(err.response?.data?.error || 'Xatolik'); }
     };
 
     const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
