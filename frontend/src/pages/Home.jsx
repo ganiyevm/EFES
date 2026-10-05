@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -11,36 +11,32 @@ import LangSelect from '../components/LangSelect';
 import { getProductImage } from '../utils/productImage';
 
 const CATS = [
-    { key: 'all',      label: 'Barchasi',     icon: '🍽' },
-    { key: 'set_menu', label: 'Setlar',        icon: '🍱' },
-    { key: 'kebab',    label: 'Kebab',         icon: '🥙' },
-    { key: 'doner',    label: 'Döner',         icon: '🌯' },
-    { key: 'burger',   label: 'Burger',        icon: '🍔' },
-    { key: 'pide',     label: 'Pide',          icon: '🫓' },
-    { key: 'izgara',   label: 'Izgara',        icon: '🥩' },
-    { key: 'corba',    label: "Sho'rva",       icon: '🍲' },
-    { key: 'salat',    label: 'Salatlar',      icon: '🥗' },
-    { key: 'pizza',    label: 'Pizza',         icon: '🍕' },
-    { key: 'drink',    label: 'Ichimliklar',   icon: '🥤' },
-    { key: 'dessert',  label: 'Desertlar',     icon: '🍰' },
-    { key: 'garnir',   label: 'Garnirlar',     icon: '🍟' },
+    { key: 'set_menu', label: 'Setlar', cue: 'Combo' },
+    { key: 'kebab', label: 'Kebab', cue: 'Grill' },
+    { key: 'doner', label: 'Doner', cue: 'Classic' },
+    { key: 'burger', label: 'Burger', cue: 'Fast' },
+    { key: 'pide', label: 'Pide', cue: 'Oven' },
+    { key: 'izgara', label: 'Izgara', cue: 'Fire' },
+    { key: 'corba', label: "Sho'rva", cue: 'Hot' },
+    { key: 'salat', label: 'Salatlar', cue: 'Fresh' },
+    { key: 'pizza', label: 'Pizza', cue: 'Slice' },
+    { key: 'drink', label: 'Ichimliklar', cue: 'Cold' },
+    { key: 'dessert', label: 'Desertlar', cue: 'Sweet' },
+    { key: 'garnir', label: 'Garnirlar', cue: 'Side' },
 ];
 
-// Mahsulotlarni kategoriyalarga guruhlash
 function groupByCategory(products) {
-    const order = CATS.filter(c => c.key !== 'all').map(c => c.key);
+    const order = CATS.map(c => c.key);
     const map = {};
     products.forEach(p => {
         const key = p.category || 'other';
         if (!map[key]) map[key] = [];
         map[key].push(p);
     });
-    const result = [];
-    order.forEach(key => { if (map[key]?.length) result.push({ key, items: map[key] }); });
-    Object.keys(map).forEach(key => {
-        if (!order.includes(key) && map[key]?.length) result.push({ key, items: map[key] });
-    });
-    return result;
+    return [
+        ...order.filter(key => map[key]?.length).map(key => ({ key, items: map[key] })),
+        ...Object.keys(map).filter(key => !order.includes(key)).map(key => ({ key, items: map[key] })),
+    ];
 }
 
 export default function Home() {
@@ -48,246 +44,149 @@ export default function Home() {
     const { items, addItem } = useCart();
     const { lang } = useT();
     const navigate = useNavigate();
+    const debounceRef = useRef(null);
 
-    const [allProducts, setAllProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [products, setProducts] = useState([]);
     const [promos, setPromos] = useState([]);
-    const [activeKey, setActiveKey] = useState('');
+    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [activeCat, setActiveCat] = useState('all');
     const [showDeliveryModal, setShowDeliveryModal] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showLangSelect, setShowLangSelect] = useState(false);
 
-    const debounceRef = useRef(null);
-    const catBarRef = useRef(null);        // pills container
-    const sectionRefs = useRef({});        // { catKey: domEl }
-    const scrollingRef = useRef(false);    // pill click scroll lock
-
     const deliveryType = localStorage.getItem('efes_delivery_type') || 'delivery';
     const savedAddress = localStorage.getItem('efes_address') || '';
-    const inCartMap = Object.fromEntries(items.map(i => [i.productId, i.qty]));
+    const addressLabel = deliveryType === 'pickup'
+        ? 'Olib ketish'
+        : (savedAddress ? savedAddress.split(',')[0] : 'Manzil tanlang');
+    const inCartMap = useMemo(() => Object.fromEntries(items.map(i => [i.productId, i.qty])), [items]);
+    const cartTotal = items.reduce((sum, item) => sum + (item.price || 0) * item.qty, 0);
 
-    // ── Fetch ──
-    const fetchAll = (q = '') => {
+    const fetchProducts = (q = '') => {
         setLoading(true);
-        const p = new URLSearchParams({ limit: 200 });
-        if (q) p.set('search', q);
-        api.get(`/products?${p}`)
-            .then(r => setAllProducts(r.data.products || []))
-            .catch(() => setAllProducts([]))
+        const params = new URLSearchParams({ limit: 200 });
+        if (q) params.set('search', q);
+        api.get(`/products?${params}`)
+            .then(r => setProducts(r.data.products || []))
+            .catch(() => setProducts([]))
             .finally(() => setLoading(false));
     };
 
     useEffect(() => {
-        fetchAll();
+        fetchProducts();
         api.get('/promotions').then(r => setPromos(r.data || [])).catch(() => {});
     }, []);
 
-    const handleSearch = (val) => {
-        setSearch(val);
+    const visibleCats = useMemo(() => {
+        const groups = groupByCategory(products);
+        return [{ key: 'all', label: 'Barchasi', cue: `${products.length} ta` }, ...groups.map(g => {
+            const cat = CATS.find(c => c.key === g.key) || { key: g.key, label: g.key, cue: 'Menu' };
+            return { ...cat, count: g.items.length };
+        })];
+    }, [products]);
+
+    const filteredProducts = useMemo(() => {
+        if (activeCat === 'all' || search) return products;
+        return products.filter(p => p.category === activeCat);
+    }, [activeCat, products, search]);
+
+    const handleSearch = (value) => {
+        setSearch(value);
+        setActiveCat('all');
         clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchAll(val), 400);
+        debounceRef.current = setTimeout(() => fetchProducts(value), 350);
     };
-
-    // ── Grouped data ──
-    const groups = search
-        ? [{ key: 'search', items: allProducts }]
-        : groupByCategory(allProducts);
-
-    // ── Scroll pill into view ──
-    const scrollPillIntoView = (key) => {
-        const el = catBarRef.current?.querySelector(`[data-cat="${key}"]`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    };
-
-    // ── Category pill click → scroll to section ──
-    const handleCatClick = (key) => {
-        const el = sectionRefs.current[key];
-        if (!el) return;
-        scrollingRef.current = true;
-        setActiveKey(key);
-        scrollPillIntoView(key);
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setTimeout(() => { scrollingRef.current = false; }, 800);
-    };
-
-    // ── IntersectionObserver: section → active pill ──
-    useEffect(() => {
-        if (search) return;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (scrollingRef.current) return;
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const key = entry.target.dataset.section;
-                        setActiveKey(key);
-                        scrollPillIntoView(key);
-                    }
-                });
-            },
-            { rootMargin: '-30% 0px -60% 0px', threshold: 0 }
-        );
-        Object.values(sectionRefs.current).forEach(el => el && observer.observe(el));
-        return () => observer.disconnect();
-    }, [groups.map(g => g.key).join(','), search]);
-
-    const addressLabel = deliveryType === 'pickup'
-        ? 'Olib ketish'
-        : (savedAddress ? savedAddress.split(',')[0] : 'Manzil tanlang');
-
-    // visible cats = only those with products (no "Barchasi")
-    const activeCats = groups.map(g => CATS.find(c => c.key === g.key)).filter(Boolean);
 
     return (
-        <div style={{ background: '#F5F2EE', minHeight: '100vh', paddingBottom: 90 }}>
-
-            {/* ══ HEADER ══ */}
-            <div style={{
-                background: 'linear-gradient(135deg, #3D0F0F 0%, #5C1A1A 100%)',
-                padding: '14px 16px 16px',
-                position: 'sticky', top: 0, zIndex: 50,
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{
-                        width: 40, height: 40, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #D4A017, #F0C040)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 900, fontSize: 17, color: '#3D0F0F', flexShrink: 0,
-                    }}>
-                        {user?.firstName?.[0]?.toUpperCase() || 'G'}
-                    </div>
-                    <button onClick={() => setShowDeliveryModal(true)} style={{
-                        flex: 1, margin: '0 12px', textAlign: 'center',
-                        background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                            {deliveryType === 'delivery' ? '🚗 Yetkazib berish' : '🏃 Olib ketish'}
-                            <span style={{ fontSize: 10, opacity: 0.7 }}>▼</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 1, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '2px auto 0' }}>
-                            {addressLabel}
-                        </div>
+        <div className="efes-market efes-market--pro">
+            <header className="efes-market-header">
+                <div className="efes-market-topline">
+                    <button className="efes-avatar" type="button" onClick={() => setShowSideMenu(true)} aria-label="Menu">
+                        <span />
+                        <span />
                     </button>
-                    <button onClick={() => setShowSideMenu(true)} style={{
-                        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                        background: 'rgba(255,255,255,0.1)', border: 'none',
-                        cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', gap: 4,
-                    }}>
-                        {[0, 0, 0].map((_, i) => (
-                            <div key={i} style={{ width: 18, height: 2, borderRadius: 2, background: '#fff' }} />
-                        ))}
+                    <button className="efes-location" type="button" onClick={() => setShowDeliveryModal(true)}>
+                        <span className="efes-location__mode">{deliveryType === 'delivery' ? 'Yetkazib berish' : 'Olib ketish'}</span>
+                        <span className="efes-location__address">{addressLabel}</span>
+                    </button>
+                    <button className="efes-profile-chip" type="button" onClick={() => navigate('/profile')} aria-label="Profile">
+                        {user?.firstName?.[0]?.toUpperCase() || 'E'}
                     </button>
                 </div>
-            </div>
 
-            {/* ══ PROMO BANNER CAROUSEL ══ */}
+                <div className="efes-hero-strip">
+                    <div>
+                        <p>EFES Kebab</p>
+                        <h1>Sevimli taomingizni tanlang</h1>
+                        <span>Grill, doner va burgerlar bir joyda</span>
+                    </div>
+                    <button type="button" onClick={() => navigate('/cart')}>
+                        <small>Savat</small>
+                        <b>{items.length}</b>
+                    </button>
+                </div>
+            </header>
+
             {promos.length > 0 && <PromoCarousel promos={promos} lang={lang} />}
 
-            {/* ══ SEARCH ══ */}
-            <div style={{ padding: '12px 16px 0' }}>
-                <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: '#999' }}>🔍</span>
+            <section className="efes-search-panel">
+                <div className="efes-search-box">
+                    <span>Qidir</span>
                     <input
                         value={search}
                         onChange={e => handleSearch(e.target.value)}
-                        placeholder="Qidirish..."
-                        style={{
-                            width: '100%', padding: '13px 40px 13px 44px',
-                            background: '#fff', border: '1.5px solid #E8E0D5',
-                            borderRadius: 14, fontSize: 15, color: '#222',
-                            outline: 'none', fontFamily: 'inherit',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'border-color 0.2s',
-                        }}
-                        onFocus={e => e.target.style.borderColor = '#C1440E'}
-                        onBlur={e => e.target.style.borderColor = '#E8E0D5'}
+                        placeholder="Kebab, burger yoki ichimlik qidiring"
                     />
-                    {search && (
-                        <button onClick={() => { setSearch(''); fetchAll(''); }} style={{
-                            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                            background: '#eee', border: 'none', borderRadius: 8,
-                            width: 26, height: 26, cursor: 'pointer', fontSize: 13, color: '#666',
-                        }}>✕</button>
-                    )}
+                    {search && <button type="button" onClick={() => { setSearch(''); fetchProducts(''); }} aria-label="Tozalash">x</button>}
                 </div>
-            </div>
+            </section>
 
-            {/* ══ CATEGORY PILLS (sticky) ══ */}
-            <div ref={catBarRef} style={{
-                display: 'flex', gap: 8, overflowX: 'auto',
-                padding: '12px 16px 8px', scrollbarWidth: 'none',
-                position: 'sticky', top: 78, zIndex: 40,
-                background: '#F5F2EE',
-            }}>
-                {activeCats.map(c => {
-                    const active = activeKey === c.key;
-                    return (
-                        <button
-                            key={c.key}
-                            data-cat={c.key}
-                            onClick={() => handleCatClick(c.key)}
-                            style={{
-                                flexShrink: 0, padding: '9px 16px', borderRadius: 24,
-                                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                                fontSize: 13, fontWeight: active ? 700 : 500,
-                                background: active ? '#C1440E' : '#fff',
-                                color: active ? '#fff' : '#444',
-                                boxShadow: active ? '0 4px 12px rgba(193,68,14,0.35)' : '0 1px 4px rgba(0,0,0,0.08)',
-                                transition: 'all 0.2s', whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {c.icon} {c.label}
-                        </button>
-                    );
-                })}
-            </div>
+            <nav className="efes-category-rail">
+                {visibleCats.map(cat => (
+                    <button
+                        key={cat.key}
+                        type="button"
+                        className={activeCat === cat.key ? 'active' : ''}
+                        onClick={() => setActiveCat(cat.key)}
+                    >
+                        <span>{cat.label}</span>
+                        <small>{cat.count || cat.cue}</small>
+                    </button>
+                ))}
+            </nav>
 
-            {/* ══ PRODUCTS (grouped sections) ══ */}
-            <div style={{ padding: '4px 16px 8px' }}>
-                {loading ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: 50 }}>
-                        <div className="spinner" style={{ borderTopColor: '#C1440E', borderColor: '#E8E0D5' }} />
+            <main className="efes-product-area">
+                <div className="efes-section-head">
+                    <div>
+                        <span>Menyu</span>
+                        <h2>{search ? 'Qidiruv natijalari' : (visibleCats.find(c => c.key === activeCat)?.label || 'Menyu')}</h2>
                     </div>
-                ) : groups.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                        <div style={{ fontSize: 52, marginBottom: 14 }}>🔍</div>
-                        <div style={{ fontWeight: 700, fontSize: 16, color: '#333', marginBottom: 6 }}>Mahsulot topilmadi</div>
-                        <div style={{ color: '#999', fontSize: 14 }}>Boshqa kalit so'z bilan qidiring</div>
+                    <button type="button" onClick={() => navigate('/orders')}>Buyurtmalar</button>
+                </div>
+
+                {loading ? (
+                    <div className="loading"><div className="spinner" /></div>
+                ) : filteredProducts.length === 0 ? (
+                    <div className="empty">
+                        <div className="empty-text">Mahsulot topilmadi</div>
+                        <div className="empty-sub">Boshqa nom bilan qidirib ko'ring</div>
                     </div>
                 ) : (
-                    groups.map(group => {
-                        const catInfo = CATS.find(c => c.key === group.key);
-                        return (
-                            <div
-                                key={group.key}
-                                ref={el => { sectionRefs.current[group.key] = el; }}
-                                data-section={group.key}
-                            >
-                                {/* Section header */}
-                                {!search && (
-                                    <div style={{
-                                        fontWeight: 900, fontSize: 24, color: '#1A1A1A',
-                                        padding: '20px 0 14px', letterSpacing: -0.5,
-                                    }}>
-                                        {catInfo?.label || group.key}
-                                    </div>
-                                )}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
-                                    {group.items.map(p => (
-                                        <ProductCard
-                                            key={p._id}
-                                            product={p}
-                                            inCart={inCartMap[p._id] || 0}
-                                            onPress={() => navigate(`/product/${p._id}`)}
-                                            onAdd={() => addItem(p)}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })
+                    <div className="efes-product-grid">
+                        {filteredProducts.map(product => (
+                            <ProductCard
+                                key={product._id}
+                                product={product}
+                                lang={lang}
+                                inCart={inCartMap[product._id] || 0}
+                                onOpen={() => navigate(`/product/${product._id}`)}
+                                onAdd={() => addItem(product)}
+                            />
+                        ))}
+                    </div>
                 )}
-            </div>
+            </main>
 
             {showDeliveryModal && (
                 <DeliveryTypeModal onSelect={() => { setShowDeliveryModal(false); window.location.reload(); }} />
@@ -298,6 +197,12 @@ export default function Home() {
             {showLangSelect && (
                 <LangSelect onSelect={() => { setShowLangSelect(false); window.location.reload(); }} />
             )}
+            {items.length > 0 && (
+                <button className="efes-floating-cart" type="button" onClick={() => navigate('/cart')}>
+                    <span>{items.length} mahsulot</span>
+                    <b>{cartTotal.toLocaleString('ru-RU')} so'm</b>
+                </button>
+            )}
             <BottomNav />
         </div>
     );
@@ -305,226 +210,62 @@ export default function Home() {
 
 function PromoCarousel({ promos, lang }) {
     const [active, setActive] = useState(0);
-    const timerRef = useRef(null);
-    const touchStartX = useRef(null);
-
-    const next = useCallback(() => setActive(i => (i + 1) % promos.length), [promos.length]);
-    const prev = useCallback(() => setActive(i => (i - 1 + promos.length) % promos.length), [promos.length]);
 
     useEffect(() => {
-        if (promos.length <= 1) return;
-        timerRef.current = setInterval(next, 3500);
-        return () => clearInterval(timerRef.current);
-    }, [next, promos.length]);
+        if (promos.length <= 1) return undefined;
+        const timer = setInterval(() => setActive(i => (i + 1) % promos.length), 4000);
+        return () => clearInterval(timer);
+    }, [promos.length]);
 
-    const resetTimer = () => {
-        clearInterval(timerRef.current);
-        timerRef.current = setInterval(next, 3500);
-    };
-
-    const goTo = (i) => { setActive(i); resetTimer(); };
-
-    const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
-    const onTouchEnd = (e) => {
-        if (touchStartX.current === null) return;
-        const diff = touchStartX.current - e.changedTouches[0].clientX;
-        if (Math.abs(diff) > 40) { diff > 0 ? next() : prev(); resetTimer(); }
-        touchStartX.current = null;
-    };
-
-    return (
-        <div style={{ padding: '12px 16px 4px' }}>
-            <style>{`
-                @keyframes promoPulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
-                @keyframes promoSlideIn { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
-            `}</style>
-            <div
-                style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', cursor: 'pointer' }}
-                onTouchStart={onTouchStart}
-                onTouchEnd={onTouchEnd}
-            >
-                {promos.map((p, i) => (
-                    <div
-                        key={p._id}
-                        style={{
-                            display: i === active ? 'block' : 'none',
-                            animation: i === active ? 'promoSlideIn 0.4s ease' : 'none',
-                        }}
-                    >
-                        <PromoBannerCard promo={p} lang={lang} />
-                    </div>
-                ))}
-
-                {/* Dots */}
-                {promos.length > 1 && (
-                    <div style={{
-                        position: 'absolute', bottom: 10, left: 0, right: 0,
-                        display: 'flex', justifyContent: 'center', gap: 6,
-                    }}>
-                        {promos.map((_, i) => (
-                            <div
-                                key={i}
-                                onClick={() => goTo(i)}
-                                style={{
-                                    width: i === active ? 20 : 6, height: 6,
-                                    borderRadius: 4,
-                                    background: i === active ? '#F0C040' : 'rgba(255,255,255,0.45)',
-                                    transition: 'all 0.35s ease',
-                                    cursor: 'pointer',
-                                }}
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-function PromoBannerCard({ promo, lang }) {
-    const title = promo.title?.[lang] || promo.title?.uz || '';
-    const hasDiscount = promo.discountValue > 0;
-    const discountLabel = hasDiscount
-        ? (promo.discountType === 'percent'
-            ? `-${promo.discountValue}%`
-            : `-${promo.discountValue?.toLocaleString()} so'm`)
+    const promo = promos[active];
+    const title = promo.title?.[lang] || promo.title?.uz || 'Aksiya';
+    const discount = promo.discountValue > 0
+        ? (promo.discountType === 'percent' ? `-${promo.discountValue}%` : `-${promo.discountValue?.toLocaleString()} so'm`)
         : null;
-    const hasImage = !!promo.imageUrl;
 
     return (
-        <div style={{
-            width: '100%', height: 180,
-            background: hasImage ? '#000' : 'linear-gradient(135deg, #1A0A00 0%, #5C1A1A 100%)',
-            position: 'relative', overflow: 'hidden',
-        }}>
-            {/* Bg image */}
-            {hasImage && (
-                <img
-                    src={promo.imageUrl}
-                    alt={title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: 0.85 }}
-                />
-            )}
-            {/* Gradient overlay */}
-            <div style={{
-                position: 'absolute', inset: 0,
-                background: 'linear-gradient(to top, rgba(10,2,0,0.88) 0%, rgba(10,2,0,0.15) 60%, transparent 100%)',
-            }} />
-            {/* Decorative circle (no image) */}
-            {!hasImage && (
-                <div style={{ position: 'absolute', top: -40, right: -40, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
-            )}
-            {/* Content */}
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '14px 16px 20px' }}>
-                {discountLabel && (
-                    <div style={{
-                        display: 'inline-block', background: '#C1440E',
-                        borderRadius: 8, padding: '4px 12px',
-                        fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 7,
-                        boxShadow: '0 2px 8px rgba(193,68,14,0.4)',
-                    }}>
-                        {discountLabel} chegirma
-                    </div>
-                )}
-                {title && (
-                    <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', lineHeight: 1.3, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>{title}</div>
-                )}
-                {promo.promoCode && (
-                    <div style={{ marginTop: 8, display: 'inline-flex', gap: 6, alignItems: 'center', background: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: '4px 12px', backdropFilter: 'blur(4px)' }}>
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>KOD:</span>
-                        <span style={{ fontSize: 14, fontWeight: 900, color: '#F0C040', letterSpacing: 2, fontFamily: 'monospace' }}>{promo.promoCode}</span>
-                    </div>
-                )}
+        <section className="efes-promo">
+            {promo.imageUrl && <img src={promo.imageUrl} alt={title} />}
+            <div className="efes-promo__shade" />
+            <div className="efes-promo__content">
+                {discount && <span>{discount}</span>}
+                <h2>{title}</h2>
+                {promo.promoCode && <p>Kod: {promo.promoCode}</p>}
             </div>
-        </div>
+            {promos.length > 1 && (
+                <div className="efes-promo__dots">
+                    {promos.map((_, i) => <button key={i} type="button" className={i === active ? 'active' : ''} onClick={() => setActive(i)} />)}
+                </div>
+            )}
+        </section>
     );
 }
 
-function ProductCard({ product, inCart, onPress, onAdd }) {
+function ProductCard({ product, lang, inCart, onOpen, onAdd }) {
+    const description = typeof product.description === 'string'
+        ? product.description
+        : (product.description?.[lang] || product.description?.uz || product.description?.ru || '');
+
     return (
-        <div
-            onClick={onPress}
-            style={{
-                background: '#fff', borderRadius: 18,
-                overflow: 'hidden', cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(34,139,34,0.22)',
-                display: 'flex', flexDirection: 'column',
-                transition: 'transform 0.15s',
-                position: 'relative',
-            }}
-            onTouchStart={e => e.currentTarget.style.transform = 'scale(0.97)'}
-            onTouchEnd={e => e.currentTarget.style.transform = 'scale(1)'}
-        >
-            {/* Image */}
-            <div style={{ height: 150, position: 'relative', flexShrink: 0, background: '#fff', overflow: 'hidden' }}>
+        <article className="efes-menu-card" onClick={onOpen}>
+            <div className="efes-menu-card__image">
                 <img
                     src={getProductImage(product)}
                     alt={product.name}
-                    style={{
-                        width: '100%', height: '100%', objectFit: 'cover',
-                        display: 'block',
-                    }}
-                    onError={e => { e.target.src = '/uploads/menu/assartitaom.jpg'; }}
+                    onError={e => { e.currentTarget.src = '/uploads/menu/assartitaom.jpg'; }}
                 />
-                {/* Badges */}
-                {product.isNew && (
-                    <div style={{
-                        position: 'absolute', top: 10, left: 10,
-                        background: '#E91E63', color: '#fff',
-                        fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
-                    }}>Yangi mahsulot</div>
+                {(product.isNew || product.isPopular) && (
+                    <span className={product.isNew ? 'pink' : ''}>{product.isNew ? 'Yangi' : 'Mashhur'}</span>
                 )}
-                {product.isPopular && !product.isNew && (
-                    <div style={{
-                        position: 'absolute', top: 10, left: 10,
-                        background: '#C1440E', color: '#fff',
-                        fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
-                    }}>Mashhur</div>
-                )}
-                {/* + button (on image, bottom-right) */}
-                <button
-                    onClick={e => { e.stopPropagation(); onAdd(); }}
-                    style={{
-                        position: 'absolute', bottom: 10, right: 10,
-                        width: 36, height: 36, borderRadius: '50%',
-                        background: inCart > 0 ? '#C1440E' : '#fff',
-                        border: 'none',
-                        color: inCart > 0 ? '#fff' : '#333',
-                        fontSize: inCart > 0 ? 14 : 20,
-                        fontWeight: 700, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                        transition: 'all 0.2s',
-                    }}
-                >
-                    {inCart > 0 ? inCart : '+'}
+                <button type="button" className={inCart ? 'active' : ''} onClick={e => { e.stopPropagation(); onAdd(); }} aria-label="Savatga qo'shish">
+                    {inCart ? inCart : '+'}
                 </button>
             </div>
-
-            {/* Info */}
-            <div style={{ padding: '12px 14px 14px' }}>
-                {/* Price row */}
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontWeight: 900, fontSize: 18, color: '#1A1A1A', letterSpacing: -0.3 }}>
-                        {(product.price || 0).toLocaleString('ru-RU')}
-                    </span>
-                    {product.discountPrice && (
-                        <span style={{ fontSize: 13, color: '#B0B0B0', textDecoration: 'line-through', fontWeight: 500 }}>
-                            {product.discountPrice.toLocaleString('ru-RU')}
-                        </span>
-                    )}
-                </div>
-                {/* Name — uppercase */}
-                <div style={{
-                    fontSize: 12, color: '#888', fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: 0.5,
-                    lineHeight: 1.3, whiteSpace: 'nowrap',
-                    overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
-                    {product.name}
-                </div>
+            <div className="efes-menu-card__body">
+                <p>{product.name}</p>
+                <strong>{(product.price || 0).toLocaleString('ru-RU')} so'm</strong>
+                {description && <span>{description}</span>}
             </div>
-        </div>
+        </article>
     );
 }
-

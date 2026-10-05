@@ -6,7 +6,7 @@ import api from '../api';
 import BottomNav from '../components/BottomNav';
 
 export default function Profile() {
-    const { user, setUser } = useAuth();
+    const { user, setUser, error: authError, authenticate } = useAuth();
     const { t, lang } = useT();
     const navigate = useNavigate();
     const [page, setPage] = useState(null);
@@ -14,13 +14,17 @@ export default function Profile() {
     const [bonusTx, setBonusTx] = useState(null);
     const [addresses, setAddresses] = useState(user?.addresses || []);
     const [favorites, setFavorites] = useState([]);
+    const [profileForm, setProfileForm] = useState({ firstName: user?.firstName || '', lastName: user?.lastName || '', phone: user?.phone || '+998' });
+    const [profileError, setProfileError] = useState('');
+    const [profileSaving, setProfileSaving] = useState(false);
 
     if (!user) return (
-        <div style={{ background: 'var(--bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center' }}>
-                <div className="spinner" style={{ margin: '0 auto 16px' }} />
-                <div style={{ color: 'var(--text-secondary)' }}>{t('loading')}</div>
-            </div>
+        <div className="profile-auth-state">
+            <div className="profile-auth-mark">!</div>
+            <strong>Profilni ochib bo'lmadi</strong>
+            <p>{authError || "Mini App ni Telegram ichidan qayta oching."}</p>
+            <button type="button" onClick={authenticate}>Qayta urinish</button>
+            <BottomNav />
         </div>
     );
 
@@ -35,6 +39,45 @@ export default function Profile() {
             localStorage.setItem('efes_lang', l);
         } catch { }
     };
+
+    const openProfileEditor = () => {
+        setProfileForm({ firstName: user.firstName || '', lastName: user.lastName || '', phone: user.phone || '+998' });
+        setProfileError('');
+        setPage('edit');
+    };
+
+    const saveProfile = async (event) => {
+        event.preventDefault();
+        setProfileError('');
+        setProfileSaving(true);
+        try {
+            const { data } = await api.put('/user/profile', profileForm);
+            setUser(data);
+            setPage(null);
+        } catch (error) {
+            setProfileError(error.response?.data?.error || "Profilni saqlab bo'lmadi");
+        } finally {
+            setProfileSaving(false);
+        }
+    };
+
+    if (page === 'edit') {
+        return (
+            <SubPage title="Profilni tahrirlash" onBack={() => setPage(null)}>
+                <form className="profile-edit-form" onSubmit={saveProfile}>
+                    <div className="profile-edit-intro">
+                        <span className="profile-edit-avatar">{(profileForm.firstName?.[0] || '?').toUpperCase()}</span>
+                        <div><strong>Shaxsiy ma'lumotlar</strong><p>Buyurtma va yetkazib berish uchun ishlatiladi.</p></div>
+                    </div>
+                    <label>Ism<input value={profileForm.firstName} onChange={e => setProfileForm(v => ({ ...v, firstName: e.target.value }))} maxLength={60} required /></label>
+                    <label>Familiya<input value={profileForm.lastName} onChange={e => setProfileForm(v => ({ ...v, lastName: e.target.value }))} maxLength={60} /></label>
+                    <label>Telefon<input type="tel" inputMode="tel" value={profileForm.phone} onChange={e => setProfileForm(v => ({ ...v, phone: e.target.value }))} placeholder="+998901234567" required /></label>
+                    {profileError && <div className="profile-form-error">{profileError}</div>}
+                    <button className="profile-save-button" type="submit" disabled={profileSaving}>{profileSaving ? 'Saqlanmoqda...' : 'Saqlash'}</button>
+                </form>
+            </SubPage>
+        );
+    }
 
     // ── Bonus page ──
     if (page === 'bonus') {
@@ -130,6 +173,7 @@ export default function Profile() {
 
             {/* ── Menu Items ── */}
             <div style={{ padding: '14px 16px' }}>
+                <MenuItem icon="ID" label={t('editProfile')} onPress={openProfileEditor} />
                 <MenuItem icon="📋" label={t('myOrders')} onPress={() => navigate('/orders')} />
                 <MenuItem icon="🎁" label={t('bonusLabel')} onPress={() => setPage('bonus')} badge={user.bonusPoints > 0 ? `${user.bonusPoints}` : null} />
                 <MenuItem icon="📍" label={t('myAddresses')} onPress={() => setPage('addresses')} />

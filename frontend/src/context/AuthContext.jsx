@@ -8,12 +8,15 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         authenticate();
     }, []);
 
     const authenticate = async () => {
+        setLoading(true);
+        setError('');
         try {
             const tg = window.Telegram?.WebApp;
             if (tg?.initData) {
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
             }
         } catch (err) {
             console.error('Auth error:', err);
+            setError(err.response?.data?.error || "Telegram orqali kirishni tasdiqlab bo'lmadi");
             localStorage.removeItem('efes_token');
             localStorage.removeItem('efes_refresh_token');
         } finally {
@@ -41,7 +45,7 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, setUser, loading }}>
+        <AuthContext.Provider value={{ user, setUser, loading, error, authenticate }}>
             {children}
         </AuthContext.Provider>
     );

@@ -17,12 +17,34 @@ router.get('/profile', authTelegram, async (req, res) => {
 // ─── Profilni yangilash ───
 router.put('/profile', authTelegram, async (req, res) => {
     try {
-        const { phone, language } = req.body;
+        const { firstName, lastName, phone, language } = req.body;
         const user = await User.findById(req.user.userId);
         if (!user) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
 
-        if (phone) user.phone = phone;
+        if (firstName !== undefined) {
+            const value = String(firstName).trim();
+            if (!value || value.length > 60) {
+                return res.status(400).json({ error: "Ism 1 dan 60 tagacha belgidan iborat bo'lishi kerak" });
+            }
+            user.firstName = value;
+        }
+        if (lastName !== undefined) {
+            const value = String(lastName).trim();
+            if (value.length > 60) {
+                return res.status(400).json({ error: "Familiya 60 belgidan oshmasligi kerak" });
+            }
+            user.lastName = value;
+        }
+        if (phone !== undefined) {
+            const value = String(phone).replace(/[\s()-]/g, '');
+            if (value && !/^\+998\d{9}$/.test(value)) {
+                return res.status(400).json({ error: "Telefon +998XXXXXXXXX formatida bo'lishi kerak" });
+            }
+            user.phone = value;
+        }
         if (language) user.language = language;
+        user.isProfileComplete = Boolean(user.firstName && user.phone);
+        user.lastActiveAt = new Date();
         await user.save();
         res.json(user);
     } catch (err) {

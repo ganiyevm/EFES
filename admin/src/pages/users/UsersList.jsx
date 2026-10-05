@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../../api/axios';
+
+const TIER_LABELS = { bronze: 'Bronza', silver: 'Kumush', gold: 'Oltin' };
 
 export default function UsersList() {
     const isSuperAdmin = localStorage.getItem('efes_admin_role') === 'super_admin';
@@ -8,140 +10,68 @@ export default function UsersList() {
     const [page, setPage] = useState(1);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
     const limit = 20;
 
     const fetchUsers = useCallback(() => {
         setLoading(true);
+        setError('');
         const params = new URLSearchParams({ page, limit });
-        if (search) params.set('search', search);
+        if (search.trim()) params.set('search', search.trim());
         api.get(`/admin/users?${params}`)
-            .then(r => { setUsers(r.data.users || []); setTotal(r.data.total || 0); })
-            .catch(() => { })
+            .then(({ data }) => { setUsers(data.users || []); setTotal(data.total || 0); })
+            .catch(err => setError(err.response?.data?.error || "Foydalanuvchilarni yuklab bo'lmadi"))
             .finally(() => setLoading(false));
     }, [page, search]);
 
     useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-    const handleBlock = async (user) => {
+    const handleBlock = async user => {
         try {
             await api.patch(`/admin/users/${user._id}/block`, { isBlocked: !user.isBlocked });
             fetchUsers();
-        } catch { }
+        } catch (err) { setError(err.response?.data?.error || "Holatni o'zgartirib bo'lmadi"); }
     };
 
-    const handleDelete = async (user) => {
-        const label = `${user.firstName} ${user.lastName}`.trim() || user.phone || 'Foydalanuvchi';
-        if (!window.confirm(`"${label}" ni o'chirishni tasdiqlaysizmi?\n\nBu amalni ortga qaytarib bo'lmaydi.`)) return;
+    const handleDelete = async user => {
+        const label = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.phone || 'Foydalanuvchi';
+        if (!window.confirm(`"${label}" ni o'chirishni tasdiqlaysizmi?`)) return;
         try {
             await api.delete(`/admin/users/${user._id}`);
             fetchUsers();
-        } catch (e) {
-            alert(e.response?.data?.error || "O'chirib bo'lmadi");
-        }
+        } catch (err) { setError(err.response?.data?.error || "Foydalanuvchini o'chirib bo'lmadi"); }
     };
 
-    const TIER_COLORS = { bronze: '#cd7f32', silver: '#aaa', gold: '#f39c12' };
-    const TIER_LABELS = { bronze: '🥉 Bronza', silver: '🥈 Kumush', gold: '🥇 Oltin' };
     const pages = Math.ceil(total / limit);
-
     return (
         <div>
             <div className="page-header">
-                <h1 className="page-title">👥 Foydalanuvchilar</h1>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Jami: {total}</span>
+                <div><h1 className="page-title">Mijozlar</h1><p className="page-subtitle">Mini App orqali ro'yxatdan o'tgan foydalanuvchilar</p></div>
+                <span className="users-total">Jami {total}</span>
+            </div>
+            <div className="filter-row users-toolbar">
+                <div className="search-bar users-search"><input className="form-input" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Ism, telefon yoki username" /></div>
+                <button className="btn btn-secondary" onClick={fetchUsers}>Yangilash</button>
             </div>
 
-            <div className="filter-row">
-                <div className="search-bar" style={{ flex: 1, maxWidth: 320 }}>
-                    <span className="search-icon">🔍</span>
-                    <input className="form-input" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Ism yoki telefon..." />
-                </div>
-            </div>
-
-            {loading ? (
-                <div style={{ textAlign: 'center', padding: 40 }}>⏳</div>
+            {loading ? <UsersState title="Ma'lumotlar yuklanmoqda..." /> : error ? (
+                <UsersState title="Ro'yxatni ochib bo'lmadi" detail={error} error action={fetchUsers} />
+            ) : users.length === 0 ? (
+                <UsersState title={search ? 'Mijoz topilmadi' : "Hali ro'yxatdan o'tgan mijoz yo'q"} detail={search ? "Qidiruv matnini o'zgartirib ko'ring." : "Foydalanuvchi Telegram Mini App ni ochganda shu yerda ko'rinadi."} />
             ) : (
-                <div className="card" style={{ padding: 0 }}>
-                    <div className="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Foydalanuvchi</th>
-                                    <th>Telefon</th>
-                                    <th>Daraja</th>
-                                    <th>Bonus</th>
-                                    <th>Buyurtmalar</th>
-                                    <th>Jami sarflagan</th>
-                                    <th>Til</th>
-                                    <th>Ro'yxatdan</th>
-                                    <th>Amal</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {users.map(u => (
-                                    <tr key={u._id} style={{ opacity: u.isBlocked ? 0.5 : 1 }}>
-                                        <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                <div style={{ width: 36, height: 36, borderRadius: 50, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--primary)' }}>
-                                                    {(u.firstName?.[0] || '?').toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontWeight: 600 }}>{u.firstName} {u.lastName}</div>
-                                                    {u.username && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>@{u.username}</div>}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td style={{ fontSize: 13 }}>{u.phone || '—'}</td>
-                                        <td>
-                                            <span style={{ fontSize: 12, fontWeight: 700, color: TIER_COLORS[u.bonusTier] }}>
-                                                {TIER_LABELS[u.bonusTier] || u.bonusTier}
-                                            </span>
-                                        </td>
-                                        <td><span className="badge badge-warning">{u.bonusPoints || 0} ball</span></td>
-                                        <td style={{ fontWeight: 600 }}>{u.totalOrders || 0}</td>
-                                        <td style={{ fontWeight: 600 }}>{(u.totalSpent || 0).toLocaleString()} so'm</td>
-                                        <td><span style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 6 }}>{u.language || 'uz'}</span></td>
-                                        <td style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                                            <div>{new Date(u.registeredAt).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-                                            <div style={{ color: 'var(--primary-light)', fontWeight: 600 }}>{new Date(u.registeredAt).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</div>
-                                        </td>
-                                        <td>
-                                            <div style={{ display: 'flex', gap: 6 }}>
-                                                <button
-                                                    className="btn btn-sm"
-                                                    style={{ background: u.isBlocked ? 'rgba(46,204,113,0.1)' : 'rgba(231,76,60,0.08)', color: u.isBlocked ? 'var(--success)' : 'var(--danger)', border: `1px solid ${u.isBlocked ? 'rgba(46,204,113,0.2)' : 'rgba(231,76,60,0.15)'}` }}
-                                                    onClick={() => handleBlock(u)}
-                                                >
-                                                    {u.isBlocked ? '✅ Ochish' : '🚫 Bloklash'}
-                                                </button>
-                                                {isSuperAdmin && (
-                                                    <button
-                                                        className="btn btn-sm"
-                                                        style={{ background: 'rgba(231,76,60,0.08)', color: 'var(--danger)', border: '1px solid rgba(231,76,60,0.15)' }}
-                                                        onClick={() => handleDelete(u)}
-                                                        title="O'chirish"
-                                                    >
-                                                        🗑
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {pages > 1 && (
-                        <div className="pagination" style={{ padding: '12px 0' }}>
-                            <button className="page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
-                            {Array.from({ length: Math.min(pages, 5) }, (_, i) => (
-                                <button key={i + 1} className={`page-btn ${page === i + 1 ? 'active' : ''}`} onClick={() => setPage(i + 1)}>{i + 1}</button>
-                            ))}
-                            <button className="page-btn" onClick={() => setPage(p => p + 1)} disabled={page === pages}>›</button>
-                        </div>
-                    )}
-                </div>
+                <div className="card users-table-card"><div className="table-wrap"><table>
+                    <thead><tr><th>Mijoz</th><th>Telefon</th><th>Daraja</th><th>Bonus</th><th>Buyurtma</th><th>Jami sarf</th><th>Til</th><th>Ro'yxatdan o'tgan</th><th>Amal</th></tr></thead>
+                    <tbody>{users.map(user => <tr key={user._id} className={user.isBlocked ? 'user-row--blocked' : ''}>
+                        <td><div className="user-identity"><span className="user-avatar">{(user.firstName?.[0] || '?').toUpperCase()}</span><div><strong>{`${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Nomsiz mijoz'}</strong><small>{user.username ? `@${user.username}` : `TG ${user.telegramId}`}</small></div></div></td>
+                        <td>{user.phone || '-'}</td><td><span className={`user-tier user-tier--${user.bonusTier || 'bronze'}`}>{TIER_LABELS[user.bonusTier] || 'Bronza'}</span></td><td>{user.bonusPoints || 0} ball</td><td>{user.totalOrders || 0}</td><td>{(user.totalSpent || 0).toLocaleString('uz-UZ')} so'm</td><td>{(user.language || 'uz').toUpperCase()}</td><td>{user.registeredAt ? new Date(user.registeredAt).toLocaleString('uz-UZ') : '-'}</td>
+                        <td><div className="user-actions"><button className="btn btn-sm btn-secondary" onClick={() => handleBlock(user)}>{user.isBlocked ? 'Faollashtirish' : 'Bloklash'}</button>{isSuperAdmin && <button className="btn btn-sm btn-danger" onClick={() => handleDelete(user)}>O'chirish</button>}</div></td>
+                    </tr>)}</tbody>
+                </table></div>{pages > 1 && <div className="pagination users-pagination"><button className="page-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>Oldingi</button><span>{page} / {pages}</span><button className="page-btn" onClick={() => setPage(p => p + 1)} disabled={page === pages}>Keyingi</button></div>}</div>
             )}
         </div>
     );
+}
+
+function UsersState({ title, detail, error, action }) {
+    return <div className={`users-state${error ? ' users-state--error' : ''}`}><strong>{title}</strong>{detail && <span>{detail}</span>}{action && <button className="btn btn-primary" onClick={action}>Qayta urinish</button>}</div>;
 }
